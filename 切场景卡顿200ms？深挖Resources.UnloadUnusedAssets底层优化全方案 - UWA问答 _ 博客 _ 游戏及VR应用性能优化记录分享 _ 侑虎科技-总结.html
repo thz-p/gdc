@@ -472,6 +472,15 @@
     #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
   }
 
+  /* ===== Footer ===== */
+  .footer {
+    text-align: center;
+    padding: 0 24px 48px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
   /* ===== Theme Toggle ===== */
   #themeToggle {
     position: fixed;
@@ -846,6 +855,10 @@
   </article>
 </div>
 
+<div class="footer">
+  <span>访问 <span id="visitCount">--</span></span>
+</div>
+
 <button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
 </button>
@@ -961,6 +974,14 @@
   themeToggle.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
   });
+
+  // Visit count
+  fetch('https://gdc.goatcounter.com/counter?q=total&mode=json')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.count) document.getElementById('visitCount').textContent = d.count;
+    })
+    .catch(function() {});
 })();
 </script>
 <script data-goatcounter="https://gdc.goatcounter.com/count"
