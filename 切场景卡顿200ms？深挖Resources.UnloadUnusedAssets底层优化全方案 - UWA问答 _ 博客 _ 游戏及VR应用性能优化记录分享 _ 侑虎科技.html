@@ -562,13 +562,13 @@
 <p>这一行看着无害，实际触发了一次Material Clone。Renderer.material的Getter不直接返回Shared Material，而是检查“这个Renderer是否已经持有自己的Material实例”，没有就Clone一份。Clone出来的实例，生命周期挂在Renderer 上。</p>
 <p>问题来了：Renderer销毁了，Clone出来的Material谁来回收？C#这边没人引用它了，但它是个NativeObject，GC.Collect()管不到。</p>
 <p>Resources.UnloadUnusedAssets就是来收这个尾的。它扫一遍所有还活着的NativeObject，找出那些“既不被C#持有、也不在场景里”的资源，挨个释放。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/1.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/1.png" /></p>
 <p><strong>1.2 还在哪里被触发</strong>
 主动调用是一种，但更隐蔽的是：每次SceneManager.LoadScene（非Additive模式），引擎自动调一次。这是写在PreloadManager里的固定流程，关不掉。也就是说，只要项目用Unity切场景，这个API就会规律性地造成固定卡顿开销。</p>
 <p><strong>1.3 规避的做法</strong>
 其实上面两个例子，UnloadUnusedAssets的调用并非完全不可规避：Clone出来的Material可以自己持有引用手动销毁，切场景的那次触发也可以稍微改造引擎去掉。但实际项目有历史负担，也要控制内存峰值，在我面对的业务场景下回避不了，只能优化。</p>
 <h3 id="_2">二、它做了什么：执行流程与异步真相</h3>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/2.png" />
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/2.png" />
 一次UnloadUnusedAssets耗时拆解</p>
 <p>UnloadUnusedAssets的内部流程，可以打这么个比方：它像物业管理员搞一次小区普查，目的是腾出空房子。整个流程分五步，每一步对应一个具体阶段。</p>
 <p><strong>2.1 五个阶段</strong>
@@ -660,7 +660,7 @@ IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs�
 </code></pre></div>
 
 <p>这16位定义在il2cpp-tabledefs.h里，有STATIC、LITERAL、HAS_DEFAULT等等。但其中有几个位是闲置的：</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/3.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/3.png" /></p>
 <p>借位3，定义成：</p>
 <div class="codehilite"><pre><span></span><code><span class="gh">#</span>define FIELD_ATTRIBUTE_SKIP_LIVENESS 0x0008
 </code></pre></div>
@@ -791,7 +791,7 @@ IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs�
 </li>
 </ul>
 <p>并且整套机制可以通过运行时开关动态控制，线上出问题可以一键关掉。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/4.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/4.png" /></p>
 <p>IL2CPP代码生成器要配合改。</p>
 <p>这两个标记位（field.attrs位3和klass.flags位22）<strong>是IL2CPP在编译时写入的</strong>。所以只改Liveness.cpp不够，IL2CPP代码生成器（C#写的Unity.IL2CPP那一套）也要改。</p>
 <p>要改的地方有两个钩子。</p>
@@ -873,10 +873,10 @@ IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs�
 </ul>
 <p>所以严格说，这两段是同一个函数体的两次执行，但消费的是<strong>两个不同来源的队列</strong>。</p>
 <p>调度顺序是这样的：</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/5.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/5.png" /></p>
 <p>把Unity 2019的多线程改出来后，实测主要问题是<strong>和FromStatics并行的那段MarkAllDependencies太短</strong>：Worker处理的是初始根（场景根+Manager根），对象数量不够多；主线程的FromStatics更长，<strong>Worker跑完之后整段闲置</strong>。</p>
 <p>更令人不是滋味的是，FromStatics过程中发现的对象数量挺多，之后主线程独自MarkAllDependencies(mainThreadState)时间也很长，<strong>这段是单线程的，Worker全在旁边看着</strong>。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/6.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/6.png" /></p>
 <p><strong>改造方向：</strong>加一个跨阶段共享队列staticNeedsProcessing，让Worker跑完初始根不退出，继续消费FromStatics实时写入的新Root，把Worker的闲置窗口压到接近零。</p>
 <p><strong>4.2 生产者-消费者模型</strong>
 要让工作线程跑起来，需要打破“主线程等Job → 主线程跑FromStatics → 工作线程空闲”的串行结构。改造目标：</p>
@@ -900,7 +900,7 @@ IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs�
 <p><strong>读写索引分离</strong>
 引擎默认多线程做MarkDependencies的队列方案是单个Count计数器，生产者Inc、消费者Dec。我们这里需要改成读写索引分离的，因为会涉及同时生产和消费。<strong>同一个值同时被多方修改、同时承担“下一个写位”和“剩余多少”两种语义</strong>，一旦消费者Dec到负数想回滚、生产者又刚好Inc，Slot就会被复用，读到错乱数据。</p>
 <p>正确做法是单调单写：</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/7.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/7.png" /></p>
 <p>两个索引各自单调递增，writeIndex - readIndex永不为负，Slot不会被复用。</p>
 <p><strong>伪代码</strong></p>
 <div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="n">生产者</span><span class="p">(</span><span class="n">主线程</span><span class="p">)</span><span class="err">—</span><span class="w"> </span><span class="n">无并发</span><span class="p">,</span><span class="n">无需</span><span class="w"> </span><span class="n">CAS</span>
@@ -938,7 +938,7 @@ IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs�
 </ul>
 <p><strong>4.4 改造后的流程</strong>
 引入共享队列后，Worker处理完初始根不再退出（Thread::YieldProcessor），FromStatics边遍历边把新发现的Root实时写入共享队列，Worker一直在消费，主线程的FromStatics一结束就也过来一起干活。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/8.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/8.png" /></p>
 <p>测下来主线程、Worker几乎全程满载，并行度大幅提高。</p>
 <p><strong>4.5 Unity 2019 vs 2022的差异处理</strong>
 如果用的是Unity 2022，前面这套生产者-消费者模型基本就是2022已有架构上的扩展，改动相对集中。如果用的是Unity 2019，要做的事情更多。但这里有个判断要做：<strong>完全照搬2022的实现不一定划算，要平衡改动量和优化效果。</strong></p>
@@ -970,9 +970,9 @@ Unity 2022在IL2CPP扫描时用了两个特殊的数据结构：</p>
 <p>这两个简化省下的代码量是几百行，对最终效果的影响在1-2ms量级，不值得为了这点收益去维护两套数据结构的兼容代码。</p>
 <h3 id="_5">五、效果验收</h3>
 <p>这两个优化在不同的设备、不同项目，甚至同一项目的不同时机均有较大的差异。只能提供一些参考数据，在1+8pro（晓龙865、4 Job Worker）上，在一个耗时较重的时机，优化前要200ms，优化后仅需50ms，优化幅度达75%。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/9.png" />
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/9.png" />
 未开优化完全交给主线程，200ms左右</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/10.png" />
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/10.png" />
 开启优化，Job Worker负载上来了，50ms内搞定</p>
 <h3 id="_6">六、一些想法</h3>
 <p>截至写本文时，前面的两个方案（标记跳过+多线程窗口扩大）已经在项目里落地，下面是之后回头的一些想法。</p>
@@ -1021,10 +1021,10 @@ Unity 2022在IL2CPP扫描时用了两个特殊的数据结构：</p>
 <p><strong>6.2 怎样才能做好资源管理？</strong>
 回到更上层的问题：Resources.UnloadUnusedAssets这个API之所以存在，是因为引擎需要替我们补一个<strong>所有权模糊</strong>的窟窿，磁盘加载的Asset没有显式的Owner，Instance Asset也没人负责，只能定期反扫一次。</p>
 <p>主流资源框架（Addressables/YooAsset/XAsset/ResKit等）做的事：<strong>在脚本层把这个窟窿堵上</strong>：</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/11.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/11.png" /></p>
 <p>资源框架在加载入口Load+1、Release-1、归零卸载，把“磁盘Asset的生命周期”从Unity手里抢回来，用Refcount做显式管理。</p>
 <p>这一层一旦到位，反过来给“标记跳过”提供了正当性 —— <strong>留在C#静态字段图里的，绝大部分就只剩纯数据了</strong>（配置表、帧同步状态、缓存字典、协议结构）。这些天然不持Native引用，正好是SKIP_LIVENESS最安全、最适合自动标记的对象。3.6那条判断标准在框架接管之后，从“逐个审”退化成“基本可以全打”。</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/12.png" />
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/12.png" />
 理想的工程实践</p>
 <p>三层各管一段，合起来才是这个时代Unity项目能拿到的“实际最优解”：</p>
 <ul>
@@ -1042,7 +1042,7 @@ Unity 2022在IL2CPP扫描时用了两个特殊的数据结构：</p>
 回头看6.1和6.2提的所有方向（自动标记、显式所有权、资源框架、Native兜底），会发现UE都有现成的对应机制。<strong>UE也有同一类问题</strong>：GC可达性扫描卡帧在UE社区同样是著名痛点，社区整理的<a href="https://ikrima.dev/ue4guide/performance-optimization/asset-size-loading/">Epic资料</a>[1]记载，Fortnite靠Blueprint Clustering才把PS4上的GC Mark耗时从~66ms压到~22ms。</p>
 <p>真正的差别在<strong>还债的成本</strong>，同一类补丁，UE做起来结构性地便宜。</p>
 <p>对应关系大致这么排：</p>
-<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/13.png" /></p>
+<p><img alt="image" src="切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/13.png" /></p>
 <p><strong>为什么同一类补丁，UE便宜、Unity贵？</strong>
 根因在对象模型：UE是<strong>一张图</strong>，Unity是<strong>两个世界</strong>。</p>
 <p><strong>UObject一开始就是GC-aware设计</strong>（对象系统在设计之初，就把“垃圾回收要怎么扫我”这件事考虑进去了）。UPROPERTY是显式声明，UHT在编译期产出完整反射信息，运行时据此组装Reference Token Stream、构建Cluster、支持Weak Pointer，每一轮GC补丁都是在引擎完全掌控的元数据上做增量改进。</p>
