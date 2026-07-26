@@ -245,7 +245,7 @@
 <div class="footer">
   Generated with <a href="https://claude.ai">Claude</a>
   <span class="sep">·</span>
-  访问 <span id="visitCount">--</span>
+  访问 <span id="busuanzi_value_site_pv"></span>
 </div>
 
 <script>
@@ -331,16 +331,9 @@
 
     container.appendChild(card);
   });
-
-  // Visit count
-  fetch('https://gdc.goatcounter.com/counter?q=total&mode=json')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d && d.count) document.getElementById('visitCount').textContent = d.count;
-    })
-    .catch(function() {});
 })();
 </script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 <script data-goatcounter="https://gdc.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </body>

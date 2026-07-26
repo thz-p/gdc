@@ -856,7 +856,7 @@
 </div>
 
 <div class="footer">
-  <span>访问 <span id="visitCount">--</span></span>
+  <span>访问 <span id="busuanzi_value_site_pv"></span></span>
 </div>
 
 <button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
@@ -975,15 +975,9 @@
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
   });
 
-  // Visit count
-  fetch('https://gdc.goatcounter.com/counter?q=total&mode=json')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d && d.count) document.getElementById('visitCount').textContent = d.count;
-    })
-    .catch(function() {});
-})();
+  })();
 </script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 <script data-goatcounter="https://gdc.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </body>
