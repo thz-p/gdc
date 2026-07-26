@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术文章知识库</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(9% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --bg-card-hover: oklch(12% .005 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(58% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(16% .006 60);
+    --border-light: oklch(20% .008 60);
+  }
+
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --bg-card-hover: oklch(88% 0.015 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(50% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.7;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active { transform: scale(0.95); }
+
+  @media (max-width: 640px) {
+    #themeToggle { top: 12px; right: 12px; width: 36px; height: 36px; font-size: 16px; }
+  }
+
+  /* ===== Header ===== */
+  .header {
+    text-align: center;
+    padding: 80px 24px 0;
+  }
+  .header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    color: var(--text-primary);
+  }
+  .header p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 4px;
+  }
+  .header .count {
+    display: inline-block;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 16px;
+    margin-top: 16px;
+  }
+
+  /* ===== Article List ===== */
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+
+  .article-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px 28px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .article-card:hover {
+    border-color: var(--accent-dim);
+    background: var(--bg-card-hover);
+  }
+
+  .article-card .title {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px;
+    line-height: 1.4;
+  }
+  .article-card .title a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .article-card .title a:hover { color: var(--accent); }
+
+  .article-card .meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .article-card .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .article-card .links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: "Inter", sans-serif;
+    font-size: 11.5px;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .article-card .links a:hover {
+    border-color: var(--accent-dim);
+    background: var(--bg-card-hover);
+  }
+
+  .article-card .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+  }
+  .article-card .tags span {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  /* ===== Footer ===== */
+  .footer {
+    text-align: center;
+    padding: 0 24px 48px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .header h1 { font-size: 24px; }
+    .header { padding-top: 56px; }
+    .container { padding: 32px 16px 64px; }
+    .article-card { padding: 18px 20px; }
+    .article-card .title { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="header">
+  <h1>技术文章知识库</h1>
+  <p>知识提炼 · 方案审校 · HTML 文档</p>
+  <span class="count" id="articleCount">0 篇文章</span>
+</div>
+
+<div class="container" id="articleList">
+  <!-- articles rendered by JS -->
+</div>
+
+<div class="footer">
+  Generated with <a href="https://claude.ai">Claude</a>
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle('theme-light', isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('gdc-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+  try {
+    var saved = localStorage.getItem('gdc-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains('theme-light'));
+  });
+
+  // ── Article Registry ──
+  var articles = [
+    {
+      title: 'Resources.UnloadUnusedAssets 底层优化全方案',
+      slug: 'ruua',
+      article: '切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技.html',
+      summary: '切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技-总结.html',
+      author: '其乐陶陶',
+      source: 'UWA 博客',
+      tags: ['Unity', '性能优化', 'IL2CPP', 'GC', '多线程']
+    }
+  ];
+
+  var container = document.getElementById('articleList');
+  document.getElementById('articleCount').textContent = articles.length + ' 篇文章';
+
+  articles.forEach(function(a) {
+    var card = document.createElement('div');
+    card.className = 'article-card';
+
+    var title = document.createElement('div');
+    title.className = 'title';
+    var titleLink = document.createElement('a');
+    titleLink.href = a.article;
+    titleLink.textContent = a.title;
+    title.appendChild(titleLink);
+    card.appendChild(title);
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = '<span>' + a.author + '</span><span class="sep">|</span><span>' + a.source + '</span>';
+    card.appendChild(meta);
+
+    var links = document.createElement('div');
+    links.className = 'links';
+    var articleLink = document.createElement('a');
+    articleLink.href = a.article;
+    articleLink.textContent = '📄 原文';
+    links.appendChild(articleLink);
+    var summaryLink = document.createElement('a');
+    summaryLink.href = a.summary;
+    summaryLink.textContent = '📝 总结 + 审校';
+    links.appendChild(summaryLink);
+    card.appendChild(links);
+
+    var tags = document.createElement('div');
+    tags.className = 'tags';
+    a.tags.forEach(function(t) {
+      var tag = document.createElement('span');
+      tag.textContent = t;
+      tags.appendChild(tag);
+    });
+    card.appendChild(tags);
+
+    container.appendChild(card);
+  });
+})();
+</script>
+</body>
+</html>
