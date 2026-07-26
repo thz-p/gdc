@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(9% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(58% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(16% .006 60);
+    --border-light: oklch(20% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(9% .005 60);
+    --quote-border: oklch(74% .135 68 / 0.4);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(50% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(93% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.3);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="toc-h3" href="#_1">前言</a>
+<a class="toc-h3" href="#resourcesunloadunusedassets">一、Resources.UnloadUnusedAssets的作用</a>
+<a class="toc-h3" href="#_2">二、它做了什么：执行流程与异步真相</a>
+<a class="toc-h3" href="#_3">三、标记跳过：让扫描器学会绕路</a>
+<a class="toc-h3" href="#_4">四、多线程优化：扩大并行窗口期</a>
+<a class="toc-h3" href="#_5">五、效果验收</a>
+<a class="toc-h3" href="#_6">六、一些想法</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/Usparkle_RUUA.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>其乐陶陶</span>
+      </div>
+      <h1>切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技</h1>
+      <div class="read-time">约 46 分钟</div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">性能优化</span>
+<span class="tag">IL2CPP</span>
+<span class="tag">GC</span>
+<span class="tag">多线程</span>
+<span class="tag">Resources.UnloadUnusedAssets</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <h3 id="_1">前言</h3>
+<p>Resources.UnloadUnusedAssets是Unity项目里一个绕不开的卡顿源：每次切场景，它都会在主线程上同步跑完一整套Native资源回收，200-300ms的耗时几乎是常态，低端机甚至到秒级别。而它名称标注的“异步”并不能把任何工作真正挪出主线程。</p>
+<p>下面分四步拆：执行机制、耗时构成、可优化的环节、具体的改造方法。最终给出两套互不冲突的优化方案，<strong>实测能把整体耗时减少70%左右</strong>。</p>
+<h3 id="resourcesunloadunusedassets">一、Resources.UnloadUnusedAssets的作用</h3>
+<p><strong>1.1 它要解决的问题</strong>
+写过Unity的都遇到过这种代码：</p>
+<div class="codehilite"><pre><span></span><code>GetComponent().material.color = Color.red;
+</code></pre></div>
+
+<p>这一行看着无害，实际触发了一次Material Clone。Renderer.material的Getter不直接返回Shared Material，而是检查“这个Renderer是否已经持有自己的Material实例”，没有就Clone一份。Clone出来的实例，生命周期挂在Renderer 上。</p>
+<p>问题来了：Renderer销毁了，Clone出来的Material谁来回收？C#这边没人引用它了，但它是个NativeObject，GC.Collect()管不到。</p>
+<p>Resources.UnloadUnusedAssets就是来收这个尾的。它扫一遍所有还活着的NativeObject，找出那些“既不被C#持有、也不在场景里”的资源，挨个释放。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/1.png" /></p>
+<p><strong>1.2 还在哪里被触发</strong>
+主动调用是一种，但更隐蔽的是：每次SceneManager.LoadScene（非Additive模式），引擎自动调一次。这是写在PreloadManager里的固定流程，关不掉。也就是说，只要项目用Unity切场景，这个API就会规律性地造成固定卡顿开销。</p>
+<p><strong>1.3 规避的做法</strong>
+其实上面两个例子，UnloadUnusedAssets的调用并非完全不可规避：Clone出来的Material可以自己持有引用手动销毁，切场景的那次触发也可以稍微改造引擎去掉。但实际项目有历史负担，也要控制内存峰值，在我面对的业务场景下回避不了，只能优化。</p>
+<h3 id="_2">二、它做了什么：执行流程与异步真相</h3>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/2.png" />
+一次UnloadUnusedAssets耗时拆解</p>
+<p>UnloadUnusedAssets的内部流程，可以打这么个比方：它像物业管理员搞一次小区普查，目的是腾出空房子。整个流程分五步，每一步对应一个具体阶段。</p>
+<p><strong>2.1 五个阶段</strong>
+<strong>第一步：列住户名册：</strong>FindAllLiveObjects打开物业系统，把所有登记在册的住户（Object::IDToPointerMap里的所有对象）抄一遍，生成liveObjects[]。</p>
+<p><strong>第二步：确认门牌种子：</strong>MarkSceneRootsAndReduceLiveObjects找出哪些住户是“明确不能动的” —— 场景里挂着的GameObject、MonoBehaviour、AssetBundle等，以及MarkManagerRoots找出的全局Manager。这些标成Root，索引加入initialNeedsProcessing队列，作为追踪起点。</p>
+<p><strong>第三步：建索引：</strong>CreateObjectToIndexMappingFromNonRootObjects为剩下的对象建一张“InstanceID → 索引”的哈希表。后面要频繁通过InstanceID找对象，有这张表能在O(1)查到。</p>
+<p><strong>第四步：把C#那边的根也加进来，然后挨家敲门：</strong>MarkManagedStaticVariableRoots + MarkAllDependencies</p>
+<p>这一步是两个连续动作，合起来占全流程接近九成：</p>
+<p><strong>4a.</strong> MarkManagedStaticVariableRoots（=GC.MarkStaticDependencies，~49%）：调IL2CPP的Liveness::FromStatics()，遍历所有C#静态字段、递归walk整个托管堆，把发现的Native对象加入needsProcessing队列。<strong>这一段全程在C#托管堆里跑，没碰Native图遍历。</strong></p>
+<p><strong>4b.</strong> MarkAllDependencies（=GC.MarkNormalDependencies，~39%）：一次性消费两个队列 —— initialNeedsProcessing（场景根/Manager根）和needsProcessing（FromStatics新发现的根），递归MarkDependencies，把所有可达Native对象Marked=1。</p>
+<p><strong>第五步：封空房：</strong>CleanupUnusedObjects扫一遍，所有没被标记到的对象，挨个释放Native内存。</p>
+<p><strong>2.2 “异步”的真相：这个API不是真异步</strong>
+到这里有人会问：这个API不是异步的吗？返回的是AsyncOperation，这么大的耗时不是应该挪到子线程去跑、不阻塞主线程吗？不是。它的“异步”只是<strong>延迟一帧</strong>：</p>
+<ul>
+<li>
+<p>调用时，把操作加入PreloadManager队列，立刻返回</p>
+</li>
+<li>
+<p>下一帧的PreloadManager.UpdatePreloading主线程执行，触发IntegrateMainThread()</p>
+</li>
+<li>
+<p>IntegrateMainThread里把整个GarbageCollectSharedAssets()跑完 —— 主线程独占</p>
+</li>
+<li>
+<p>子线程那边只做了一件小事：关一下文件流，占比可忽略</p>
+</li>
+</ul>
+<p>也就是说，所谓“异步”，只是把卡顿推迟到下一帧；主线程并没有逃脱阻塞。</p>
+<p><strong>2.3 案例</strong>
+在一个MOBA项目中，Loading末尾调了一下Resources.UnloadUnusedAssets，目的是把Loading期间临时加载的资源回收一下，避免战斗场景内存压力大。调用是fire-and-forget的：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="err">加载各种资源</span>
+<span class="n">DoBattleLoading</span><span class="p">();</span>
+<span class="o">//</span><span class="w"> </span><span class="n">Loading</span><span class="w"> </span><span class="err">末尾</span>
+<span class="n">Resources</span><span class="o">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span>
+<span class="o">//</span><span class="w"> </span><span class="err">接下来发送自己加载结束的消息</span>
+<span class="n">SendMarkLoadingComplete</span><span class="p">();</span>
+</code></pre></div>
+
+<p>听起来很合理。但上线后发现一件诡异的事：不同玩家入局时间不一样。有的玩家进战斗场景立刻能动，有的玩家会卡一会儿才能动。</p>
+<p>排查到最后定位到这个API。原因是：UnloadUnusedAssets的Integrate时机依赖PreloadManager的调度，<strong>它什么时候在主线程跑，引擎说了算</strong>，Integrate一般会推迟执行。</p>
+<p>结果就是Integrate漏掉了战斗场景刚开始的那一帧。这一帧主线程被GC阻塞了200ms，玩家看到的就是“刚进入战斗就卡了一下”。这种漏出的发生概率和设备性能、当前帧的工作负载、场景切换的Loading速度都有关。低端机更容易漏掉战斗场景，高端机偶尔也会中招，一场对战10个玩家，每个人入局时间都不一致。</p>
+<p><strong>2.4 把控制权拿回主线程</strong>
+把引擎里现成的WaitForAllAsyncOperationsToComplete暴露给脚本层就够了。这个方法在PreloadManager一直存在，只是没暴露到C#。也可以用协程轮询AsyncOperation.isDone，等做完再继续。</p>
+<p>Loading末尾改成：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="n">Loading</span><span class="w"> </span><span class="err">末尾</span>
+<span class="n">Resources</span><span class="o">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span>
+<span class="o">//</span><span class="w"> </span><span class="err">主线程同步等到所有</span><span class="w"> </span><span class="n">PreloadManager</span><span class="w"> </span><span class="err">队列里的异步操作完成</span>
+<span class="n">WaitForAllOperationsToComplete</span><span class="p">();</span>
+<span class="o">//</span><span class="w"> </span><span class="err">此时</span><span class="w"> </span><span class="n">GC</span><span class="w"> </span><span class="err">已经跑完</span><span class="p">,</span><span class="err">可以安全跳战斗</span>
+<span class="n">SendMarkLoadingComplete</span><span class="p">();</span>
+</code></pre></div>
+
+<p>代价是Loading末尾多卡200ms，但卡在Loading玩家心理上能接受（进度条还没满），卡在战斗里不能接受（对战已经开始了）。这个改动不解决“为什么慢”，但解决了“什么时候慢”，把不可控的延迟变成可控的延迟。</p>
+<p>「慢」本身怎么解，下一节开始处理。</p>
+<h3 id="_3">三、标记跳过：让扫描器学会绕路</h3>
+<p>前面我们提到，第四步两个子项里，MarkStaticDependencies<strong>（4a）单独占总耗时35-45%，是最大的单点热点</strong>。</p>
+<p>为什么4a这么慢？ 它要做的是IL2CPP层面的Liveness扫描：</p>
+<ul>
+<li>
+<p>拿到所有有静态字段的Class</p>
+</li>
+<li>
+<p>每个Class的每个静态字段，如果是引用类型，就读出来</p>
+</li>
+<li>
+<p>引用指向的对象，继续遍历它的所有字段</p>
+</li>
+<li>
+<p>字段里的对象是数组，数组每个元素再遍历</p>
+</li>
+<li>
+<p>一直递归下去，直到没有新发现</p>
+</li>
+</ul>
+<p>时间复杂度大概是O(类数量×静态字段数×引用深度×数组元素数)。一旦项目代码量上来，这个数字就爆炸了。实测一个中等规模MOBA项目，单这一步就要50-100ms。</p>
+<p>我的直觉是，我们游戏C#层存在大量配置表对象，这块确保无Native对象，就没必要扫，一定是有明显的优化空间的，所以，可以进行一些标记，<strong>让扫描器看到不必扫的字段就跳过</strong>。</p>
+<p>听起来简单，做起来要绕过三道坎。</p>
+<p><strong>3.1 第一道坎：运行时判断不能慢</strong>
+最朴素的想法是给字段挂个[SkipLiveness] Attribute，扫描时查一下：</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">if</span><span class="w"> </span><span class="o">(</span><span class="nt">Reflection</span><span class="p">::</span><span class="nd">HasAttribute</span><span class="o">(</span><span class="nt">field</span><span class="o">,</span><span class="w"> </span><span class="nt">SkipLivenessAttribute</span><span class="o">))</span>
+<span class="w"> </span><span class="nt">continue</span><span class="o">;</span>
+</code></pre></div>
+
+<p>HasAttribute涉及二分查找，O(log n) 一次。每个字段每次GC都查一遍，一千个类、几万个字段，加起来就是几十毫秒 —— 优化没做出来，先把扫描搞慢了。</p>
+<p>要做就要做到O(1)。</p>
+<p><strong>3.2 第二道坎：在哪里挂这个标记位</strong>
+IL2CPP里描述每个字段的元数据是Il2CppType结构，其中有个Attrs字段，16位：</p>
+<div class="codehilite"><pre><span></span><code>unsigned int attrs : 16; // 字段属性 bitmask
+</code></pre></div>
+
+<p>这16位定义在il2cpp-tabledefs.h里，有STATIC、LITERAL、HAS_DEFAULT等等。但其中有几个位是闲置的：</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/3.png" /></p>
+<p>借位3，定义成：</p>
+<div class="codehilite"><pre><span></span><code><span class="gh">#</span>define FIELD_ATTRIBUTE_SKIP_LIVENESS 0x0008
+</code></pre></div>
+
+<p>扫描时一个位与判断就完事：</p>
+<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">field</span><span class="o">-&gt;</span><span class="k">type</span><span class="o">-&gt;</span><span class="nx">attrs</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="nx">FIELD_ATTRIBUTE_SKIP_LIVENESS</span><span class="p">)</span>
+<span class="w"> </span><span class="k">continue</span><span class="p">;</span>
+</code></pre></div>
+
+<p>零内存开销，扫描时多一次判断。</p>
+<p><strong>3.3 借位安全吗：TaggedPointer同源思想</strong>
+借空闲位不是新发明，业界用了几十年了。最经典的例子是IL2CPP Liveness自己用的TaggedPointer。</p>
+<p>64位指针对齐到8字节，每个合法对象地址的最低3位永远是0：</p>
+<div class="codehilite"><pre><span></span><code><span class="mf">0</span><span class="n">x7fff12340000</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">末位</span><span class="w"> </span><span class="mf">0</span>
+<span class="mf">0</span><span class="n">x7fff12340008</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">末位</span><span class="w"> </span><span class="mf">0</span>
+<span class="mf">0</span><span class="n">x7fff12340010</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">末位</span><span class="w"> </span><span class="mf">0</span>
+</code></pre></div>
+
+<p>IL2CPP直接借最低位做“已访问”标记：</p>
+<div class="codehilite"><pre><span></span><code><span class="cp">#define MARK_OBJ(obj) (obj)-&gt;klass = ((obj)-&gt;klass | 1)</span>
+<span class="cp">#define IS_MARKED(obj) ((obj)-&gt;klass &amp; 1)</span>
+<span class="cp">#define GET_CLASS(obj) ((obj)-&gt;klass &amp; ~1)</span>
+</code></pre></div>
+
+<p>零内存开销，完全不需要额外的哈希表记录“哪些对象访问过”。</p>
+<p>借Attrs的位3也是同样的思路：这个位本来就闲着，使用前后保持向下兼容，所有读写Attrs的地方都按位掩码取自己关心的位。</p>
+<p>未来要注意的是IL2CPP升级时，如果官方启用了位3表示别的语义，就要换一位。维护成本是每次跨版本升引擎时检查一下il2cpp-tabledefs.h的位定义有没有冲突。</p>
+<p><strong>3.4 第三道坎：GC描述符的暗坎</strong>
+按上面的方案改完，<strong>直接挂在Static字段上的 [SkipLiveness] 是生效的</strong> —— 这正是3.2方案能解决的核心场景。</p>
+<p>写法：静态字段直接标记（生效）</p>
+<div class="codehilite"><pre><span></span><code><span class="k">public</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="n">ConfigManager</span>
+<span class="err">{</span>
+<span class="w"> </span><span class="o">[</span><span class="n">SkipLiveness</span><span class="o">]</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">_configCache</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">跳过这个静态字段的</span><span class="w"> </span><span class="n">Liveness</span><span class="w"> </span><span class="n">扫描</span>
+
+<span class="w"> </span><span class="o">[</span><span class="n">SkipLiveness</span><span class="o">]</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="k">static</span><span class="w"> </span><span class="k">Dictionary</span><span class="w"> </span><span class="n">_strTable</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">同上</span>
+<span class="err">}</span>
+</code></pre></div>
+
+<p>Liveness跑到ConfigManager时，FromStatics迭代它的所有静态字段，在FieldCanContainReferences里查field.attrs &amp; FIELD_ATTRIBUTE_SKIP_LIVENESS，命中就直接Continue。<strong>这两个字段连同它们引用的整张对象图，全部不再扫描</strong> —— 这正是省下耗时的来源。</p>
+<p>但在实战中，业务代码不会这么干净。更常见的写法是把多个字段封装到一个数据类里，然后Static字段持有这个类的实例。这时候问题就来了：把 [SkipLiveness] 标记到嵌套实例字段上，无效。</p>
+<p>写法：嵌套实例字段标记（失效）</p>
+<div class="codehilite"><pre><span></span><code><span class="k">public</span><span class="w"> </span><span class="n">classTestData</span>
+<span class="err">{</span>
+<span class="w"> </span><span class="o">[</span><span class="n">SkipLiveness</span><span class="o">]</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">testList</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">实例字段</span><span class="p">,</span><span class="n">标记无效</span>
+<span class="w"> </span><span class="o">[</span><span class="n">SkipLiveness</span><span class="o">]</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="k">Dictionary</span><span class="w"> </span><span class="n">dict</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">同上</span><span class="p">,</span><span class="n">标记无效</span>
+<span class="err">}</span>
+
+<span class="n">publicclassManager</span>
+<span class="err">{</span>
+<span class="w"> </span><span class="n">publicstatic</span><span class="w"> </span><span class="n">TestData</span><span class="w"> </span><span class="k">data</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">静态字段</span><span class="p">(</span><span class="n">第一层</span><span class="p">)</span>
+<span class="err">}</span>
+</code></pre></div>
+
+<p>FromStatics进入Manager.data后，Liveness拿到TestData实例，然后期望按字段上的 [SkipLiveness] 跳过testList和dict。但实测下来testList 还是被完整遍历了一遍 —— <strong>挂在实例字段上的标记完全无效</strong>。</p>
+<p><strong>为什么失效：GC描述符的快速路径</strong>
+刨根挖到Liveness::TraverseGenericObject：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">size_t</span><span class="w"> </span><span class="n">gc_desc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">size_t</span><span class="p">)(</span><span class="n">GET_CLASS</span><span class="p">(</span><span class="n">object</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">gc_desc</span><span class="p">);</span>
+<span class="nf">if</span><span class="w"> </span><span class="p">(</span><span class="n">gc_desc</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span>
+<span class="w"> </span><span class="n">TraverseGCDescriptor</span><span class="p">(</span><span class="n">object</span><span class="p">,</span><span class="w"> </span><span class="n">state</span><span class="p">);</span><span class="w"> </span><span class="c1">// 走快速路径(按位图扫)</span>
+<span class="n">else</span><span class="w"> </span><span class="nf">if</span><span class="w"> </span><span class="p">(</span><span class="err">有数组</span><span class="p">)</span>
+<span class="w"> </span><span class="n">TraverseArray</span><span class="p">(...);</span>
+<span class="n">else</span>
+<span class="w"> </span><span class="n">TraverseObject</span><span class="p">(...);</span><span class="w"> </span><span class="c1">// 走慢速路径(逐字段查 attrs)</span>
+</code></pre></div>
+
+<p>问题出在gc_desc（GC描述符）。它是IL2CPP给每个Class预生成的一张位图，按字段偏移记录“哪些位置是引用类型”。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="n">TestData</span><span class="w"> </span><span class="n">内存布局</span><span class="w"> </span><span class="n">gc_desc</span><span class="w"> </span><span class="n">位图</span>
+<span class="err">────────────────────</span><span class="w"> </span><span class="err">──────────</span>
+<span class="n">offset</span><span class="w"> </span><span class="mi">0</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="n">object</span><span class="w"> </span><span class="n">header</span><span class="p">]</span><span class="w"> </span><span class="mi">0</span>
+<span class="n">offset</span><span class="w"> </span><span class="mi">8</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="n">List</span><span class="p">]</span><span class="w"> </span><span class="err">──►</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">引用</span><span class="p">,</span><span class="n">需扫描</span>
+<span class="n">offset</span><span class="w"> </span><span class="mi">16</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="n">Dictionary</span><span class="p">]</span><span class="w"> </span><span class="err">──►</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">引用</span><span class="p">,</span><span class="n">需扫描</span>
+<span class="n">offset</span><span class="w"> </span><span class="mi">24</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="kt">int</span><span class="w"> </span><span class="n">field</span><span class="p">]</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="err">←</span><span class="w"> </span><span class="n">值类型</span><span class="p">,</span><span class="n">不扫</span>
+</code></pre></div>
+
+<p>实例对象走TraverseGCDescriptor时，直接按位图偏移取引用、加入待处理队列，<strong>完全不经过字段元数据</strong>，field.attrs上挂的SkipLiveness位没人查。所以失效。</p>
+<p>而<strong>静态字段没有gc_desc这层快速路径</strong>，走的是FromStatics → 字段元数据迭代，所以field.attrs标记对静态字段是生效的。一个走快速路径、一个走慢速路径，造成了行为差异。</p>
+<p>那把gc_desc也改一下，把SkipLiveness字段从位图里去掉，行不行？不行。</p>
+<p>gc_desc不只Liveness在用，<strong>Boehm GC分配内存时也用它</strong>：</p>
+<div class="codehilite"><pre><span></span><code><span class="nf">if</span><span class="w"> </span><span class="p">(</span><span class="n">klass</span><span class="o">-&gt;</span><span class="n">gc_desc</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="n">GC_NO_DESCRIPTOR</span><span class="p">)</span>
+<span class="w"> </span><span class="n">o</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AllocateSpec</span><span class="p">(</span><span class="n">klass</span><span class="o">-&gt;</span><span class="n">instance_size</span><span class="p">,</span><span class="w"> </span><span class="n">klass</span><span class="p">);</span><span class="w"> </span><span class="c1">// 把 gc_desc 传给 Boehm</span>
+</code></pre></div>
+
+<p>Boehm GC通过gc_desc知道对象内部哪些位置是引用，GC标记阶段才能精确扫描这些位置。如果在gc_desc里把SkipLiveness字段排除掉，Boehm GC也会跳过这些字段，字段引用的对象就不会被标记为存活，然后被错误回收会导致野指针，崩溃。</p>
+<p>gc_desc是禁区，不能动。</p>
+<p><strong>解决方向：换一层挂标记</strong>
+字段级标记走不通，那就整个类一起挂 —— 既然TraverseGCDescriptor是按Class派发的（GET_CLASS(object)-&gt;gc_desc），那么在判断走不走快速路径之前，先在类级别拦一道：这个类整体跳过。</p>
+<p>写法：类级标记</p>
+<div class="codehilite"><pre><span></span><code><span class="o">[</span><span class="n">SkipLiveness</span><span class="o">]</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">标记到类上</span>
+<span class="n">publicclassConfigPayload</span>
+<span class="err">{</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">testList</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">类内字段都不再被</span><span class="w"> </span><span class="n">Liveness</span><span class="w"> </span><span class="n">扫描</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="k">Dictionary</span><span class="w"> </span><span class="n">dict</span><span class="p">;</span>
+<span class="w"> </span><span class="k">public</span><span class="w"> </span><span class="n">NestedConfig</span><span class="w"> </span><span class="n">nested</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">嵌套引用也不会再下钻</span>
+<span class="err">}</span>
+
+<span class="n">publicclassManager</span>
+<span class="err">{</span>
+<span class="w"> </span><span class="n">publicstatic</span><span class="w"> </span><span class="n">ConfigPayload</span><span class="w"> </span><span class="n">payload</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">静态字段持有这个纯数据类</span>
+<span class="err">}</span>
+</code></pre></div>
+
+<p>业务侧的用法很简单：把所有需要跳过Liveness的纯数据字段，封装到一个独立的类里，在类上挂 [SkipLiveness]。</p>
+<p><strong>3.5 解法：类级跳过</strong>
+绕过快速路径的办法，是在更高一层拦截。在Il2CppClass.flags（32位）里再借一位：</p>
+<div class="codehilite"><pre><span></span><code><span class="gh">#</span>define TYPE_ATTRIBUTE_SKIP_LIVENESS 0x00400000
+</code></pre></div>
+
+<p>然后在AddProcessObject入口判断：</p>
+<div class="codehilite"><pre><span></span><code><span class="n">bool</span><span class="w"> </span><span class="kr">skip</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">GET_CLASS</span><span class="p">(</span><span class="n">obj</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">flags</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">TYPE_ATTRIBUTE_SKIP_LIVENESS</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">bool</span><span class="w"> </span><span class="n">has_references</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">obj</span><span class="o">-&gt;</span><span class="n">klass</span><span class="o">-&gt;</span><span class="n">has_references</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="kr">skip</span><span class="p">;</span>
+</code></pre></div>
+
+<p>整个类的实例对象都不递归遍历，但gc_desc一个字节都不动，Boehm GC仍然按原样精确扫描。</p>
+<p>这样一共有三个拦截点，组成一个完整的跳过体系：</p>
+<ul>
+<li>
+<p><strong>静态字段扫描入口</strong>（类级）：整个类的所有静态字段一起跳</p>
+</li>
+<li>
+<p><strong>字段级判断</strong>：单个静态字段的Attrs检查</p>
+</li>
+<li>
+<p><strong>实例对象扫描入口</strong>（类级）：这个类的实例不再递归</p>
+</li>
+</ul>
+<p>并且整套机制可以通过运行时开关动态控制，线上出问题可以一键关掉。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/4.png" /></p>
+<p>IL2CPP代码生成器要配合改。</p>
+<p>这两个标记位（field.attrs位3和klass.flags位22）<strong>是IL2CPP在编译时写入的</strong>。所以只改Liveness.cpp不够，IL2CPP代码生成器（C#写的Unity.IL2CPP那一套）也要改。</p>
+<p>要改的地方有两个钩子。</p>
+<p><strong>钩子1：字段级Attrs</strong> —— 在Il2CppTypeCollectorComponent.Add之前，扫一下字段的CustomAttributes，如果命中 [SkipLiveness] 就把Attrs加上位3再传进去：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 伪代码:在生成 Il2CppType 元数据时</span>
+<span class="nb">int</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="p">(</span><span class="nb">int</span><span class="p">)</span><span class="n">field</span><span class="p">.</span><span class="n">Attributes</span><span class="p">;</span><span class="w"> </span><span class="c1">// 原本的 STATIC / LITERAL 等</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">HasSkipLivenessAttribute</span><span class="p">(</span><span class="n">field</span><span class="p">))</span>
+<span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="o">|</span><span class="p">=</span><span class="w"> </span><span class="mi">0</span><span class="n">x0008</span><span class="p">;</span><span class="w"> </span><span class="c1">// FIELD_ATTRIBUTE_SKIP_LIVENESS</span>
+<span class="n">Il2CppTypeCollector</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">fieldType</span><span class="p">,</span><span class="w"> </span><span class="n">attrs</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>钩子2：类级Flags</strong> —— 在生成Il2CppClass元数据时，扫类的CustomAttributes：</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 伪代码:在生成 Il2CppClass 元数据时</span>
+<span class="nx">uint</span><span class="w"> </span><span class="nx">flags</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="nx">ComputeOriginalClassFlags</span><span class="p">(</span><span class="nx">typeDef</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">HasSkipLivenessAttribute</span><span class="p">(</span><span class="nx">typeDef</span><span class="p">))</span>
+<span class="w"> </span><span class="nx">flags</span><span class="w"> </span><span class="o">|=</span><span class="w"> </span><span class="mh">0x00400000</span><span class="p">;</span><span class="w"> </span><span class="c1">// TYPE_ATTRIBUTE_SKIP_LIVENESS</span>
+<span class="nx">EmitClassFlags</span><span class="p">(</span><span class="nx">typeDef</span><span class="p">,</span><span class="w"> </span><span class="nx">flags</span><span class="p">);</span>
+</code></pre></div>
+
+<p>两个钩子都是几行代码，但找位置要花点功夫，Unity.IL2CPP项目里生成元数据的入口分散在几个Component里，需要顺着Il2CppTypeCollectorComponent、MetadataWriter这些类去找具体的字段/类元数据写入点。</p>
+<p>最后顺手定义一下C#侧的Attribute，让业务代码能用：</p>
+<div class="codehilite"><pre><span></span><code>namespace UnityEngine
+{
+ [AttributeUsage(AttributeTargets.Field | AttributeTargets.Class)]
+ public class SkipLivenessAttribute : Attribute { }
+}
+</code></pre></div>
+
+<p><strong>3.6 适合什么、不适合什么</strong>
+这个优化的安全性，取决于“被标记的对象是否会持有<strong>非场景内</strong>的Native引用”。</p>
+<p>为什么强调“非场景内”？因为场景里的GameObject、Component、以及挂在它们上的Material/Texture，在流程里走的是另一条扫描路径 —— MarkSceneRoots会从场景根开始把它们全部keep住，不依赖C#静态字段这条路径。也就是说，即便你的类持有一个场景里的GameObject引用，跳过C#这边的扫描也不会让它被误回收，因为场景那条路径已经替你兜底了。</p>
+<p>真正危险的是<strong>游离于场景之外</strong>的Native引用：Resources.Load出来但没挂到场景里的Texture、AssetBundle加载后缓存在C#字典里的Material、动态生成的Mesh等。这些只靠C#静态字段链路引用，标记跳过后就会误删。</p>
+<p><strong>适合：</strong></p>
+<ul>
+<li>
+<p>游戏内的配置表（纯数据）</p>
+</li>
+<li>
+<p>C#帧同步层对象（有放服务器跑的诉求，这一层天然不能持引擎Native引用）</p>
+</li>
+<li>
+<p>客户端缓存的其它大量纯数据结构，比如一些服务器协议对象</p>
+</li>
+</ul>
+<p><strong>不适合：</strong></p>
+<ul>
+<li>
+<p>持有Resources.Load/AssetBundle加载且未入场景的Native引用的对象</p>
+</li>
+<li>
+<p>持有动态生成、未挂到场景的Material/Texture/Mesh引用的对象</p>
+</li>
+<li>
+<p><strong>其它任何你拿不准、不熟悉的对象</strong></p>
+</li>
+</ul>
+<p>加错了的后果是：这些游离Native资源被错误回收，运行时崩溃。这也是为什么这个优化要谨慎，一刀切打到不该打的对象上，死状很惨。</p>
+<h3 id="_4">四、多线程优化：扩大并行窗口期</h3>
+<p>用多线程榨多核算力是常规思路。Unity 2019里多线程优化的雏形已经在了，但官方没写完，用宏隔离关闭着；Unity 2022已经延续开发并默认开启。</p>
+<p>所以可以借助AI把2019的多线程优化直接「补全」，但默认方案仍有很大的改造空间。</p>
+<p><strong>4.1 默认的多线程优化方案</strong>
+整个流程核心是优化MarkManagedStaticVariableRoots + MarkAllDependencies这两段的耗时。先把它们做的事说清楚：</p>
+<ul>
+<li>
+<p>MarkManagedStaticVariableRoots（简称FromStatics）：从所有C#静态字段出发，沿引用链递归遍历整个C#托管堆，把过程中遇到的Native对象InstanceID加入needsProcessing队列。<strong>全程在托管堆里跑，不进Native图。</strong></p>
+</li>
+<li>
+<p>MarkAllDependencies：消费needsProcessing队列，<strong>在Native对象图上做BFS</strong> —— 取一个Native对象、读它的引用、新发现的加回队列，直到队列空，所有可达对象Marked=1。</p>
+</li>
+</ul>
+<p>注意MarkAllDependencies这个函数其实是被调用两次的：</p>
+<ul>
+<li>
+<p><strong>第一次，主线程进FromStatics之前先派发一次给Worker</strong> —— 让Worker提前消费已经准备好的initialNeedsProcessing（场景根+Manager根+External根这批“提前知道存活的种子”）</p>
+</li>
+<li>
+<p><strong>第二次，主线程在FromStatics跑完之后自己再调一次</strong> —— 消费mainThreadState.needsProcessing（也就是上面FromStatics边扫边写入的那张清单）</p>
+</li>
+</ul>
+<p>所以严格说，这两段是同一个函数体的两次执行，但消费的是<strong>两个不同来源的队列</strong>。</p>
+<p>调度顺序是这样的：</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/5.png" /></p>
+<p>把Unity 2019的多线程改出来后，实测主要问题是<strong>和FromStatics并行的那段MarkAllDependencies太短</strong>：Worker处理的是初始根（场景根+Manager根），对象数量不够多；主线程的FromStatics更长，<strong>Worker跑完之后整段闲置</strong>。</p>
+<p>更令人不是滋味的是，FromStatics过程中发现的对象数量挺多，之后主线程独自MarkAllDependencies(mainThreadState)时间也很长，<strong>这段是单线程的，Worker全在旁边看着</strong>。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/6.png" /></p>
+<p><strong>改造方向：</strong>加一个跨阶段共享队列staticNeedsProcessing，让Worker跑完初始根不退出，继续消费FromStatics实时写入的新Root，把Worker的闲置窗口压到接近零。</p>
+<p><strong>4.2 生产者-消费者模型</strong>
+要让工作线程跑起来，需要打破“主线程等Job → 主线程跑FromStatics → 工作线程空闲”的串行结构。改造目标：</p>
+<ul>
+<li>
+<p>主线程派发多线程任务后不等，立刻开始跑FromStatics</p>
+</li>
+<li>
+<p>FromStatics每发现一个新对象，实时投放到一个共享队列</p>
+</li>
+<li>
+<p>工作线程消费这个共享队列</p>
+</li>
+<li>
+<p>主线程跑完FromStatics才同步等待</p>
+</li>
+</ul>
+<p>这是经典的生产者-消费者模型。</p>
+<p><strong>4.3 共享队列的设计</strong>
+场景是<strong>1个生产者（主线程FromStatics回调）+N个消费者（Worker）</strong>，生产消费同时发生，容量上界已知（liveObjects.size()），生命周期只到本次GC结束。</p>
+<p><strong>读写索引分离</strong>
+引擎默认多线程做MarkDependencies的队列方案是单个Count计数器，生产者Inc、消费者Dec。我们这里需要改成读写索引分离的，因为会涉及同时生产和消费。<strong>同一个值同时被多方修改、同时承担“下一个写位”和“剩余多少”两种语义</strong>，一旦消费者Dec到负数想回滚、生产者又刚好Inc，Slot就会被复用，读到错乱数据。</p>
+<p>正确做法是单调单写：</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/7.png" /></p>
+<p>两个索引各自单调递增，writeIndex - readIndex永不为负，Slot不会被复用。</p>
+<p><strong>伪代码</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="n">生产者</span><span class="p">(</span><span class="n">主线程</span><span class="p">)</span><span class="err">—</span><span class="w"> </span><span class="n">无并发</span><span class="p">,</span><span class="n">无需</span><span class="w"> </span><span class="n">CAS</span>
+<span class="n">buf</span><span class="o">[</span><span class="n">writeIndex</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">index</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">先写数据</span>
+<span class="n">atomic_store</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">writeIndex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="k">release</span><span class="p">);</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">再发布索引</span>
+
+<span class="o">//</span><span class="w"> </span><span class="n">消费者</span><span class="p">(</span><span class="n">Worker</span><span class="p">)</span><span class="err">—</span><span class="w"> </span><span class="n">多消费者用</span><span class="w"> </span><span class="n">CAS</span><span class="w"> </span><span class="n">抢</span><span class="w"> </span><span class="n">slot</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(;;)</span><span class="w"> </span><span class="err">{</span>
+<span class="w"> </span><span class="nc">int</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">readIndex</span><span class="p">;</span>
+<span class="w"> </span><span class="nc">int</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">);</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">w</span><span class="p">)</span><span class="w"> </span><span class="err">{</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">scanComplete</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">readIndex</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">writeIndex</span><span class="p">)</span>
+<span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">真的没了</span>
+<span class="w"> </span><span class="n">YieldProcessor</span><span class="p">();</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span>
+<span class="w"> </span><span class="err">}</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="err">!</span><span class="n">CAS</span><span class="p">(</span><span class="o">&amp;</span><span class="n">readIndex</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">抢失败重来</span>
+<span class="w"> </span><span class="n">MarkDependencies</span><span class="p">(</span><span class="n">buf</span><span class="o">[</span><span class="n">r</span><span class="o">]</span><span class="p">);</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="n">children</span><span class="w"> </span><span class="n">进本线程私有队列</span>
+<span class="err">}</span>
+</code></pre></div>
+
+<p>关键点：</p>
+<ul>
+<li>
+<p>写顺序：数据先落，索引后发布。Release保证消费者Acquire读到新writeIndex时数据已可见</p>
+</li>
+<li>
+<p><strong>CAS抢readIndex</strong>：多消费者只有一个能成功，失败重试，不需要锁</p>
+</li>
+<li>
+<p><strong>不用Ring Buffer</strong>：容量按上界Reserve，索引单调推进到底就停；两个索引每次GC前归零</p>
+</li>
+<li>
+<p>和JobSystem无锁栈的设计很相似</p>
+</li>
+</ul>
+<p><strong>4.4 改造后的流程</strong>
+引入共享队列后，Worker处理完初始根不再退出（Thread::YieldProcessor），FromStatics边遍历边把新发现的Root实时写入共享队列，Worker一直在消费，主线程的FromStatics一结束就也过来一起干活。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/8.png" /></p>
+<p>测下来主线程、Worker几乎全程满载，并行度大幅提高。</p>
+<p><strong>4.5 Unity 2019 vs 2022的差异处理</strong>
+如果用的是Unity 2022，前面这套生产者-消费者模型基本就是2022已有架构上的扩展，改动相对集中。如果用的是Unity 2019，要做的事情更多。但这里有个判断要做：<strong>完全照搬2022的实现不一定划算，要平衡改动量和优化效果。</strong></p>
+<p>下面几个2022的设计选择，在2019里可以用更简化的方案。</p>
+<p><strong>不必单开线程池</strong>
+Unity 2022里有个AGCThreadPool，几个专用线程只服务资源回收流程，不参与JobSystem调度。</p>
+<p>专用线程的好处是“不被其他工作干扰”。但仔细想想：UnloadUnusedAssets期间，整个硬件资源本来就高度集中在这一件事上 —— 主线程在跑GC，业务逻辑也卡住了，JobSystem也基本没别的活干。这时候专用线程的“隔离”优势就消失了。</p>
+<p>代价倒是实打实的：每开一个线程多一份栈内存（默认1MB起）。在内存压力本来就大的移动设备上，这是浪费。2019里直接复用JobSystem的Worker线程即可。JobSystem的work-stealing机制会自己处理负载均衡，业务空闲时这些线程也能去做别的事。</p>
+<p><strong>IL2CPP内部缓存可以简化</strong>
+Unity 2022在IL2CPP扫描时用了两个特殊的数据结构：</p>
+<ul>
+<li>
+<p>DynamicHeapAllocator（引擎自己的内存分配器）替代malloc/free。优点是统一追踪、TLSF算法分配快、减少碎片化。</p>
+</li>
+<li>
+<p>CustomGrowableBlockArray（分块数组）替代连续数组。优点是Grow时只新分配一个Block，不需要把整个数组复制到新地址。</p>
+</li>
+</ul>
+<p>这两个优化都很合理，但都是<strong>非核心</strong>的优化，单次触发的内存分配次数有限，大部分时间不在分配上。</p>
+<p>2019里可以简单替换：</p>
+<ul>
+<li>
+<p>内存分配：直接用OS默认的malloc/free，并且在确定了内存分配方案后，不需要涉及GC堆的stop/start world处理，能规避一个死锁的问题</p>
+</li>
+<li>
+<p>数组容器：维持连续数组（std::vector-like），Grow时复制一次，可接受</p>
+</li>
+</ul>
+<p>这两个简化省下的代码量是几百行，对最终效果的影响在1-2ms量级，不值得为了这点收益去维护两套数据结构的兼容代码。</p>
+<h3 id="_5">五、效果验收</h3>
+<p>这两个优化在不同的设备、不同项目，甚至同一项目的不同时机均有较大的差异。只能提供一些参考数据，在1+8pro（晓龙865、4 Job Worker）上，在一个耗时较重的时机，优化前要200ms，优化后仅需50ms，优化幅度达75%。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/9.png" />
+未开优化完全交给主线程，200ms左右</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/10.png" />
+开启优化，Job Worker负载上来了，50ms内搞定</p>
+<h3 id="_6">六、一些想法</h3>
+<p>截至写本文时，前面的两个方案（标记跳过+多线程窗口扩大）已经在项目里落地，下面是之后回头的一些想法。</p>
+<p><strong>6.1 把【加不加标记】从人脑里拿出来</strong>
+整个是否加标记的判断标准：“这个类的字段里会不会摸到非场景内的UnityEngine.Object”，说白了就是<strong>人工做可达性分析</strong>，这件事是这套方案最脆的环节：</p>
+<ul>
+<li>
+<p>漏审一次，Native资源被误回收，运行时崩溃，且崩溃点离标记点很远，排查成本极高</p>
+</li>
+<li>
+<p>收益受限于“敢标的范围”，不敢标的部分继续被扫，优化天花板被人压低</p>
+</li>
+</ul>
+<p>但“类型字段闭包能否到达UnityEngine.Object”在数学上是个<strong>纯静态可达性问题</strong>，IL2CPP在生成元数据时拿得到完整类型图，完全可以自己算出来。</p>
+<p>可行的做法是在IL2CPP代码生成器里插一个Pass：</p>
+<div class="codehilite"><pre><span></span><code><span class="o">//</span><span class="w"> </span><span class="err">简化伪代码</span>
+<span class="nb nb-Type">bool</span><span class="w"> </span><span class="n">CanReachUnityObject</span><span class="p">(</span><span class="n">TypeDef</span><span class="w"> </span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="n">HashSet</span><span class="w"> </span><span class="n">visited</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">visited</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">t</span><span class="p">))</span><span class="w"> </span><span class="n">returnfalse</span><span class="p">;</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">IsSubclassOf</span><span class="p">(</span><span class="s2">&quot;UnityEngine.Object&quot;</span><span class="p">))</span><span class="w"> </span><span class="n">returntrue</span><span class="p">;</span>
+<span class="w"> </span><span class="n">foreach</span><span class="w"> </span><span class="p">(</span><span class="k">var</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">t</span><span class="o">.</span><span class="n">InstanceFields</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w"> </span><span class="k">var</span><span class="w"> </span><span class="n">ft</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="o">.</span><span class="n">FieldType</span><span class="o">.</span><span class="n">Resolve</span><span class="p">();</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ft</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb nb-Type">null</span><span class="p">)</span><span class="w"> </span><span class="n">returntrue</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="err">不可解析</span><span class="p">:</span><span class="err">保守</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ft</span><span class="o">.</span><span class="n">IsInterface</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="n">ft</span><span class="o">.</span><span class="n">IsSealed</span><span class="p">)</span><span class="w"> </span><span class="n">returntrue</span><span class="p">;</span><span class="w"> </span><span class="o">//</span><span class="w"> </span><span class="err">多态</span><span class="p">:</span><span class="err">保守</span>
+<span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">CanReachUnityObject</span><span class="p">(</span><span class="n">ft</span><span class="p">,</span><span class="w"> </span><span class="n">visited</span><span class="p">))</span><span class="w"> </span><span class="n">returntrue</span><span class="p">;</span>
+<span class="w"> </span><span class="p">}</span>
+<span class="w"> </span><span class="n">returnfalse</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="o">//</span><span class="w"> </span><span class="err">对所有</span><span class="w"> </span><span class="n">sealed</span><span class="w"> </span><span class="err">类</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">struct</span><span class="p">,</span><span class="err">闭包不可达</span><span class="w"> </span><span class="n">UnityEngine</span><span class="o">.</span><span class="n">Object</span><span class="w"> </span><span class="err">的</span><span class="p">,</span>
+<span class="o">//</span><span class="w"> </span><span class="err">自动给</span><span class="w"> </span><span class="n">Il2CppClass</span><span class="o">.</span><span class="n">flags</span><span class="w"> </span><span class="err">打上</span><span class="w"> </span><span class="n">TYPE_ATTRIBUTE_SKIP_LIVENESS</span>
+</code></pre></div>
+
+<p>这样：</p>
+<ul>
+<li>
+<p><strong>配置表、纯数据Struct、协议结构体</strong>，绝大多数Sealed类型自动识别，不漏不错</p>
+</li>
+<li>
+<p><strong>多态字段</strong>（Object、Interface、未Sealed基类）无法静态决定，保守不打，继续走原扫描，安全的部分自动加速，不安全的部分原样跑</p>
+</li>
+<li>
+<p><strong>手工Attribute</strong>退化成“针对静态分析判true、人工确信安全的多态字段”再加</p>
+</li>
+</ul>
+<p>挂载点和3.5改的位置完全一致，MetadataWriter写出Il2CppClass.flags之前的Type Pass。改造工作量在数百行代码量级，但能把“人审”这个成本移走大部分，而且预期会有更高的收益。</p>
+<p><strong>6.2 怎样才能做好资源管理？</strong>
+回到更上层的问题：Resources.UnloadUnusedAssets这个API之所以存在，是因为引擎需要替我们补一个<strong>所有权模糊</strong>的窟窿，磁盘加载的Asset没有显式的Owner，Instance Asset也没人负责，只能定期反扫一次。</p>
+<p>主流资源框架（Addressables/YooAsset/XAsset/ResKit等）做的事：<strong>在脚本层把这个窟窿堵上</strong>：</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/11.png" /></p>
+<p>资源框架在加载入口Load+1、Release-1、归零卸载，把“磁盘Asset的生命周期”从Unity手里抢回来，用Refcount做显式管理。</p>
+<p>这一层一旦到位，反过来给“标记跳过”提供了正当性 —— <strong>留在C#静态字段图里的，绝大部分就只剩纯数据了</strong>（配置表、帧同步状态、缓存字典、协议结构）。这些天然不持Native引用，正好是SKIP_LIVENESS最安全、最适合自动标记的对象。3.6那条判断标准在框架接管之后，从“逐个审”退化成“基本可以全打”。</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/12.png" />
+理想的工程实践</p>
+<p>三层各管一段，合起来才是这个时代Unity项目能拿到的“实际最优解”：</p>
+<ul>
+<li>
+<p><strong>资源框架</strong>解决“该谁释放谁释放”的所有权问题：这是结构性的，只能从加载入口前移。</p>
+</li>
+<li>
+<p><strong>本文的两个优化</strong>解决“剩余必须留给引擎兜底”的部分，扫描尽可能快：这是局部的，但在不能改API的前提下已经是上限。</p>
+</li>
+<li>
+<p><strong>HideFlags</strong>解决“即便前两层判错，关键资源不丢”：这是兜底的，成本极低，价值在于把“判错”的后果从崩溃降级为内存多占。</p>
+</li>
+</ul>
+<p><strong>6.3 横向对照：UE是怎么处理同一类问题的</strong>
+回头看6.1和6.2提的所有方向（自动标记、显式所有权、资源框架、Native兜底），会发现UE都有现成的对应机制。<strong>UE也有同一类问题</strong>：GC可达性扫描卡帧在UE社区同样是著名痛点，社区整理的<a href="https://ikrima.dev/ue4guide/performance-optimization/asset-size-loading/">Epic资料</a>[1]记载，Fortnite靠Blueprint Clustering才把PS4上的GC Mark耗时从~66ms压到~22ms。</p>
+<p>真正的差别在<strong>还债的成本</strong>，同一类补丁，UE做起来结构性地便宜。</p>
+<p>对应关系大致这么排：</p>
+<p><img alt="image" src="../articles/切场景卡顿200ms？深挖Resources.UnloadUnusedAssets底层优化全方案 - UWA问答 _ 博客 _ 游戏及VR应用性能优化记录分享 _ 侑虎科技_files/13.png" /></p>
+<p><strong>为什么同一类补丁，UE便宜、Unity贵？</strong>
+根因在对象模型：UE是<strong>一张图</strong>，Unity是<strong>两个世界</strong>。</p>
+<p><strong>UObject一开始就是GC-aware设计</strong>（对象系统在设计之初，就把“垃圾回收要怎么扫我”这件事考虑进去了）。UPROPERTY是显式声明，UHT在编译期产出完整反射信息，运行时据此组装Reference Token Stream、构建Cluster、支持Weak Pointer，每一轮GC补丁都是在引擎完全掌控的元数据上做增量改进。</p>
+<p>Unity的对象系统则是<strong>native-first</strong>：对象归C++ 管，C#侧只是持m_CachedPtr的Wrapper，对象所有权从未交给脚本层。要说清的是，Unity的Native半张图其实有自己的Token Stream等价物，MarkAllDependencies靠序列化元数据遍历Native引用，这部分并不慢；真正缺显式声明的是<strong>Managed侧的引用</strong>，它们散落在一个引擎读不懂的托管堆里，只能整堆反向扫描。这也正好解释了为什么本文的优化火力全部打在FromStatics 上：债务只欠在半张图上。</p>
+<p>换句话说：<strong>200ms不是Unity独有的，而是“全图可达性扫描”这个通病在双对象世界里的重症形态</strong>，每一分同类优化都得先跨过IL2CPP这道墙；DOTS选择的则是绕开对象模型、躲掉GC，而不是把对象系统改造成GC-aware。我们这种【在传统GameObject世界里贴补丁】的工程，就是这个时代的常态。</p>
+<p>参考</p>
+<p><a href="https://ikrima.dev/ue4guide/performance-optimization/asset-size-loading/">1</a> Epic 资料
+<a href="https://ikrima.dev/ue4guide/performance-optimization/asset-size-loading/">https://ikrima.dev/ue4guide/performance-optimization/asset-size-loading/</a></p>
+<hr />
+<p>这是侑虎科技第2008篇文章，感谢作者其乐陶陶供稿。欢迎转发分享，未经作者授权请勿转载。如果您有任何独到的见解或者发现也欢迎联系我们，一起探讨。（QQ群：793972859）</p>
+<p>作者主页：<a href="https://www.zhihu.com/people/jun-yan-76-80">https://www.zhihu.com/people/jun-yan-76-80</a></p>
+<p>再次感谢其乐陶陶的分享，如果您有任何独到的见解或者发现也欢迎联系我们，一起探讨。（QQ群：793972859）</p>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+})();
+</script>
+</body>
+</html>
