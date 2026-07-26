@@ -214,6 +214,7 @@
     color: var(--text-secondary);
   }
   .footer a { color: var(--accent); text-decoration: none; }
+  .footer .sep { color: var(--border-light); padding: 0 4px; }
 
   @media (max-width: 640px) {
     .header h1 { font-size: 24px; }
@@ -243,6 +244,8 @@
 
 <div class="footer">
   Generated with <a href="https://claude.ai">Claude</a>
+  <span class="sep">·</span>
+  访问 <span id="visitCount">--</span>
 </div>
 
 <script>
@@ -328,6 +331,14 @@
 
     container.appendChild(card);
   });
+
+  // Visit count
+  fetch('https://gdc.goatcounter.com/counter?q=total&mode=json')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d && d.count) document.getElementById('visitCount').textContent = d.count;
+    })
+    .catch(function() {});
 })();
 </script>
 <script data-goatcounter="https://gdc.goatcounter.com/count"
