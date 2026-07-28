@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Resources.UnloadUnusedAssets 底层优化方案 — 知识提炼 + 审校</title>
+<title>1个额外相机、400个DrawCall：简单画面为何不简单</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -518,329 +518,73 @@
 
 <div class="toc-wrap" id="toc">
   <div class="toc-label">目录</div>
-  <a class="" href="#_1">一、核心痛点</a>
-<a class="toc-h3" href="#_2">下调执行时机</a>
-<a class="" href="#5">二、执行流程拆解（5 阶段）</a>
-<a class="" href="#skipliveness">三、优化方案一：标记跳过（SkipLiveness）</a>
-<a class="toc-h3" href="#_3">借位零开销</a>
-<a class="toc-h3" href="#_4">三类标记的生效情况</a>
-<a class="toc-h3" href="#gc_desc">陷阱：gc_desc 是禁区</a>
-<a class="toc-h3" href="#_5">适用范围</a>
-<a class="" href="#-">四、优化方案二：多线程生产者-消费者模型</a>
-<a class="toc-h3" href="#_6">问题</a>
-<a class="toc-h3" href="#_7">改造</a>
-<a class="toc-h3" href="#_8">设计要点</a>
-<a class="" href="#_9">五、实测效果</a>
-<a class="" href="#_10">六、更高层面思考</a>
-<a class="toc-h3" href="#61">6.1 自动标记</a>
-<a class="toc-h3" href="#62">6.2 三层架构</a>
-<a class="toc-h3" href="#63-ue">6.3 UE 对照</a>
-<a class="" href="#_11">附：优化方案审校</a>
-<a class="toc-h3" href="#skipliveness_1">SkipLiveness 标记跳过</a>
-<a class="toc-h3" href="#-_1">多线程生产者-消费者模型</a>
-<a class="toc-h3" href="#_12">综合结论</a>
+  <a class="" href="#uidrawcall400">实战案例一：UI简单，DrawCall为何接近400</a>
+<a class="" href="#camera">实战案例二：只显示一个模型的Camera，为何耗时仍然很高</a>
 </div>
 
 <div class="container">
   <article>
     <div class="article-header">
       <div class="article-meta">
-        <a href="https://blog.uwa4d.com/archives/Usparkle_RUUA.html">UWA 博客</a>
+        <a href="https://blog.uwa4d.com/archives/TechSharing_486.html">UWA 博客</a>
         <span class="sep">/</span>
         <span>厚积薄发</span>
         <span class="sep">·</span>
-        <span>其乐陶陶</span>
+        <span>UWA 社区</span>
       </div>
-      <h1>Resources.UnloadUnusedAssets 底层优化方案 — 知识提炼 + 审校</h1>
-      <div class="read-time">约 12 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <h1>1个额外相机、400个DrawCall：简单画面为何不简单</h1>
+      <div class="read-time">约 8 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
       <div class="tags">
         <span class="tag">Unity</span>
-<span class="tag">性能优化</span>
-<span class="tag">IL2CPP</span>
-<span class="tag">GC</span>
-<span class="tag">多线程</span>
-<span class="tag">Resources.UnloadUnusedAssets</span>
+<span class="tag">UGUI</span>
+<span class="tag">DrawCall</span>
+<span class="tag">Camera</span>
+<span class="tag">渲染优化</span>
       </div>
     </div>
 
     <div class="article" id="article-content">
-      <h2 id="_1">一、核心痛点</h2>
-<p>每次切场景，<code>Resources.UnloadUnusedAssets</code> 在主线程同步阻塞 <strong>200~300ms</strong>（低端机甚至到秒级）。标注的"异步"仅是延迟一帧，<strong>主线程并未逃脱阻塞</strong>。</p>
-<div class="codehilite"><pre><span></span><code><span class="n">Resources</span><span class="p">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span><span class="w">  </span><span class="c1">// 看似异步，实则阻塞主线程 200ms+</span>
-</code></pre></div>
-
-<h3 id="_2">下调执行时机</h3>
-<p>方案不解决"为什么慢"，但解决"什么时候慢"。把不可控的延迟变成可控的延迟。</p>
-<div class="codehilite"><pre><span></span><code><span class="n">Resources</span><span class="p">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span>
-<span class="n">WaitForAllOperationsToComplete</span><span class="p">();</span><span class="w">  </span><span class="c1">// 等 GC 跑完再跳战斗</span>
-<span class="n">SendMarkLoadingComplete</span><span class="p">();</span>
-</code></pre></div>
-
+      <p>1）UI简单，DrawCall为何接近400<br />
+2）只显示一个模型的Camera，为何耗时仍然很高</p>
 <hr />
-<h2 id="5">二、执行流程拆解（5 阶段）</h2>
-<table>
-<thead>
-<tr>
-<th>阶段</th>
-<th>耗时占比</th>
-<th>说明</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>① FindAllLiveObjects</td>
-<td>低</td>
-<td>枚举所有 Native 对象</td>
-</tr>
-<tr>
-<td>② MarkSceneRoots</td>
-<td>低</td>
-<td>标记场景根/Manager 根为存活</td>
-</tr>
-<tr>
-<td>③ CreateObjectToIndexMapping</td>
-<td>低</td>
-<td>建 InstanceID → 索引哈希表</td>
-</tr>
-<tr>
-<td><strong>④a MarkStaticDependencies</strong></td>
-<td><strong>~49%</strong></td>
-<td>遍历 C# 静态字段，递归扫描托管堆。<strong>最大热点</strong></td>
-</tr>
-<tr>
-<td><strong>④b MarkNormalDependencies</strong></td>
-<td><strong>~39%</strong></td>
-<td>在 Native 对象图上做 BFS</td>
-</tr>
-<tr>
-<td>⑤ CleanupUnusedObjects</td>
-<td>低</td>
-<td>释放未标记的 Native 资源</td>
-</tr>
-</tbody>
-</table>
+<h2 id="uidrawcall400">实战案例一：UI简单，DrawCall为何接近400</h2>
+<p><strong>Q：我们在测试过程中发现，部分玩法画面从视觉上看并不算复杂，但运行时的UI相关开销却比较高。画面中并没有直观可见的大量复杂内容，为什么UI相关开销还是比较高？这类问题应该从哪些方向继续定位？</strong></p>
 <blockquote>
-<p>④a + ④b 合计占 <strong>~88%</strong> 总耗时，是整个优化的主攻方向。</p>
+<p><strong>A：</strong> 这个问题的关键在于，UI画面的视觉复杂程度和实际渲染开销并不是完全对应的。开发者通常会根据画面中能看到多少图片、文字和控件来判断UI压力，但UGUI的渲染成本还会受到绘制批次数量、UI元素组织方式以及更新频率等因素影响。即使最终画面看起来并不拥挤，只要UGUI产生了大量独立的绘制批次，渲染提交开销同样会明显升高。</p>
+<p>从UWA GOT Online报告可以看到，渲染模块中的Canvas.RenderSubBatch调用次数区间峰值达到394次。在这份报告的分析口径中，该节点的调用次数可以用来观察相应帧中的UGUI DrawCall数量变化。极端情况下，项目的UGUI DrawCall数量达到300～400的水平，说明UI侧需要提交的绘制批次已经处于较高水平。</p>
 </blockquote>
-<hr />
-<h2 id="skipliveness">三、优化方案一：标记跳过（SkipLiveness）</h2>
-<p><strong>思路</strong>：让 GC 扫描器看到"不必扫的字段/类"就跳过，减少 ④a 的遍历范围。</p>
-<h3 id="_3">借位零开销</h3>
-<p>在 IL2CPP 元数据的空闲位做标记，运行时一条位与指令判断，O(1)，零内存开销：</p>
-<ul>
-<li>字段级：<code>field.attrs</code> 位 3 → <code>FIELD_ATTRIBUTE_SKIP_LIVENESS 0x0008</code></li>
-<li>类级：<code>klass.flags</code> 位 22 → <code>TYPE_ATTRIBUTE_SKIP_LIVENESS 0x00400000</code></li>
-</ul>
-<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">field</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">attrs</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">FIELD_ATTRIBUTE_SKIP_LIVENESS</span><span class="p">)</span>
-<span class="w">    </span><span class="k">continue</span><span class="p">;</span><span class="w">  </span><span class="c1">// 跳过这个字段的 Liveness 扫描</span>
-</code></pre></div>
-
-<h3 id="_4">三类标记的生效情况</h3>
-<table>
-<thead>
-<tr>
-<th>标记位置</th>
-<th>是否生效</th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>类级 <code>[SkipLiveness]</code></td>
-<td>✅ 生效</td>
-<td>整个类的实例跳过 Liveness 递归</td>
-</tr>
-<tr>
-<td>静态字段 <code>[SkipLiveness]</code></td>
-<td>✅ 生效</td>
-<td>单个静态字段跳过</td>
-</tr>
-<tr>
-<td>实例字段 <code>[SkipLiveness]</code></td>
-<td>❌ 失效</td>
-<td>实例对象走 gc_desc 位图快速路径，不查字段元数据</td>
-</tr>
-</tbody>
-</table>
-<h3 id="gc_desc">陷阱：gc_desc 是禁区</h3>
-<p>gc_desc 不只 Liveness 在用，<strong>Boehm GC 分配内存时也用它</strong>做精确扫描。如果在 gc_desc 里排除字段，Boehm GC 也会跳过，导致字段引用的对象被错误回收，引发<strong>野指针崩溃</strong>。</p>
-<h3 id="_5">适用范围</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">安全（可标记）</th>
-<th style="text-align: left;">危险（不可标记）</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">游戏配置表（纯数据）</td>
-<td style="text-align: left;">持有 Resources.Load 加载的资源</td>
-</tr>
-<tr>
-<td style="text-align: left;">帧同步层对象（无引擎引用）</td>
-<td style="text-align: left;">持有 AssetBundle 加载的 Native 引用</td>
-</tr>
-<tr>
-<td style="text-align: left;">服务器协议对象</td>
-<td style="text-align: left;">持有动态生成未挂场景的 Material/Texture/Mesh</td>
-</tr>
-<tr>
-<td style="text-align: left;">其他纯数据结构</td>
-<td style="text-align: left;">任何拿不准的对象</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="-">四、优化方案二：多线程生产者-消费者模型</h2>
-<h3 id="_6">问题</h3>
-<p>Worker 处理完<strong>初始根（场景根+Manager 根）</strong>后闲置，等待主线程跑完 FromStatics。</p>
-<h3 id="_7">改造</h3>
-<p>引入<strong>读写索引分离的共享队列</strong>，主线程（生产者）实时投放新 Root，Worker（消费者）持续消费，闲置窗口压到接近零。</p>
-<div class="codehilite"><pre><span></span><code><span class="c1">// 生产者（主线程）</span>
-<span class="n">buf</span><span class="p">[</span><span class="n">writeIndex</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">index</span><span class="p">;</span>
-<span class="n">atomic_store</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">writeIndex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">release</span><span class="p">);</span>
-
-<span class="c1">// 消费者（Worker）— 多消费者用 CAS 抢 slot</span>
-<span class="k">for</span><span class="w"> </span><span class="p">(;;)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">readIndex</span><span class="p">;</span>
-<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">);</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">w</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">scanComplete</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">readIndex</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">writeIndex</span><span class="p">)</span>
-<span class="w">            </span><span class="k">break</span><span class="p">;</span>
-<span class="w">        </span><span class="n">YieldProcessor</span><span class="p">();</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">CAS</span><span class="p">(</span><span class="o">&amp;</span><span class="n">readIndex</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span>
-<span class="w">    </span><span class="n">MarkDependencies</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">r</span><span class="p">]);</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<h3 id="_8">设计要点</h3>
-<ul>
-<li><strong>写顺序</strong>：数据先落，索引后发布（Release/Acquire 语义）</li>
-<li><strong>CAS 抢 readIndex</strong>：多消费者只有一个能成功，无锁</li>
-<li><strong>不用 Ring Buffer</strong>：容量按上界 Reserve，索引单调推进到底</li>
-<li><strong>复用 JobSystem Worker 线程</strong>：不额外开线程池，避免移动端 1MB 栈内存浪费</li>
-</ul>
-<hr />
-<h2 id="_9">五、实测效果</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">机型</th>
-<th style="text-align: left;">优化前</th>
-<th style="text-align: left;">优化后</th>
-<th style="text-align: left;">降幅</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">骁龙 865 (1+8pro)</td>
-<td style="text-align: left;">~200ms</td>
-<td style="text-align: left;">~50ms</td>
-<td style="text-align: left;"><strong>75%</strong></td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="_10">六、更高层面思考</h2>
-<h3 id="61">6.1 自动标记</h3>
-<p>IL2CPP 代码生成器在编译期做<strong>静态可达性分析</strong>，自动给"闭包不可达 <code>UnityEngine.Object</code>"的 sealed 类打上标记。</p>
-<div class="codehilite"><pre><span></span><code><span class="kt">bool</span><span class="w"> </span><span class="nf">CanReachUnityObject</span><span class="p">(</span><span class="n">TypeDef</span><span class="w"> </span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="n">HashSet</span><span class="o">&lt;</span><span class="n">TypeDef</span><span class="o">&gt;</span><span class="w"> </span><span class="n">visited</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">visited</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">t</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="p">.</span><span class="n">IsSubclassOf</span><span class="p">(</span><span class="s">&quot;UnityEngine.Object&quot;</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
-<span class="w">    </span><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">InstanceFields</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">ft</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">FieldType</span><span class="p">.</span><span class="n">Resolve</span><span class="p">();</span>
-<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ft</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">ft</span><span class="p">.</span><span class="n">IsInterface</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="n">ft</span><span class="p">.</span><span class="n">IsSealed</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
-<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">CanReachUnityObject</span><span class="p">(</span><span class="n">ft</span><span class="p">,</span><span class="w"> </span><span class="n">visited</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
-<span class="w">    </span><span class="p">}</span>
-<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<h3 id="62">6.2 三层架构</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">层级</th>
-<th style="text-align: left;">职责</th>
-<th style="text-align: left;">解决什么问题</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">资源框架（Addressables/YooAsset）</td>
-<td style="text-align: left;">显式 Refcount 管理资源生命周期</td>
-<td style="text-align: left;">结构性：解决"该谁释放"的所有权问题</td>
-</tr>
-<tr>
-<td style="text-align: left;">本文的两个优化</td>
-<td style="text-align: left;">扫描尽可能快</td>
-<td style="text-align: left;">局部性：在不能改 API 的前提下做到上限</td>
-</tr>
-<tr>
-<td style="text-align: left;">HideFlags</td>
-<td style="text-align: left;">关键资源不丢</td>
-<td style="text-align: left;">兜底：将判错后果从崩溃降级为内存多占</td>
-</tr>
-</tbody>
-</table>
-<h3 id="63-ue">6.3 UE 对照</h3>
-<p>UE 有类似的 GC 卡顿问题（Fortnite 的 GC Mark 从 ~66ms 压到 ~22ms）。但 UE 的 UObject 是 <strong>GC-aware 设计</strong>，修补成本更低。Unity 的痛点根因在于<strong>双对象世界</strong>（C++ Native + C# Managed 两张图），IL2CPP 是额外的一道墙。</p>
+<p><img alt="RenderSubBatch 调用次数峰值394" src="ugui-drawcall-camera_files/1.png" /></p>
 <blockquote>
-<p>200ms 不是 Unity 独有的，而是"全图可达性扫描"这个通病在双对象世界里的重症形态。</p>
+<p>这里需要注意，UGUI DrawCall较高，并不等于画面中一定存在大量可见控件。场景中的部分玩法表现可能通过UI组件实现，再叠加UI特效、TMP文本等内容后，即使画面看起来并不复杂，实际参与渲染和更新的UI对象仍可能很多。至于具体哪些元素破坏了合批，目前仅凭报告还无法直接确定，需要结合项目结构和渲染调试数据继续确认。</p>
+<p>同时，该问题也反映在CPU侧的UI处理开销上。UI模块CPU耗时平均达到7.85ms，说明它不仅带来了较多渲染批次，同时也占用了较多CPU时间。对于目标帧率为60FPS的项目，一帧总预算约为16.67ms，UI模块长期占用接近8ms，会明显压缩逻辑、动画和其他渲染工作的执行空间。</p>
 </blockquote>
-<hr />
-<h2 id="_11">附：优化方案审校</h2>
-<h3 id="skipliveness_1">SkipLiveness 标记跳过</h3>
-<p><strong>✅ 技术原理正确。</strong> IL2CPP 元数据存在空闲位、静态字段与实例字段走不同扫描路径、gc_desc 是 Boehm GC 共享禁区——这些关键判断均准确无误。</p>
-<p><strong>⚠️ 主要风险：</strong>
-- <strong>IL2CPP 版本升级</strong>：借用的空闲位可能在 Unity 升级时被官方占用，不会收到通知，需每次跨版本做二进制比对
-- <strong>人工审计负担</strong>：中大型项目的类型闭包极复杂，人工可达性分析容易漏审。漏标后果是运行时崩溃，排查成本极高
-- <strong>has_references 截断风险</strong>：<code>has_references &amp;&amp; !skip</code> 会将整个类的 Native 引用链全部截断——如果类中混入一个持 Resources.Load 引用的字段，该资源会被误回收</p>
-<p><strong>🔧 可行性：</strong> 技术上可行，但需团队具备 IL2CPP 运行时 + 代码生成器的修改能力，建议搭配自动静态分析一起做。</p>
-<h3 id="-_1">多线程生产者-消费者模型</h3>
-<p><strong>✅ 设计合理。</strong> 读写索引分离、Release/Acquire 内存序、CAS 抢 readIndex、复用 JobSystem Worker 线程——这些设计决策均正确且务实。</p>
-<p><strong>⚠️ 需要注意的细节：</strong>
-- <strong>scanComplete 同步</strong>：主线程必须写完所有数据后才设置 <code>scanComplete = true</code>，且用 release 语义保证 Worker 的 acquire 能看到所有前置写入
-- <strong>忙等对移动端的影响</strong>：<code>YieldProcessor</code> spin-wait 在低端机上可能影响功耗和发热
-- <strong>Worker 线程可用性</strong>：大部分情况下 JobSystem 在 GC 期间无其他任务，但并非绝对保证</p>
-<p><strong>🔧 可行性：</strong> 高度可行，本质上是 Unity 2022 官方多线程 GC 实现思路的复现。</p>
-<h3 id="_12">综合结论</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align: left;">维度</th>
-<th style="text-align: left;">评价</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align: left;">技术深度</td>
-<td style="text-align: left;">优秀，对 IL2CPP 运行时和 GC 流程理解准确</td>
-</tr>
-<tr>
-<td style="text-align: left;">正确性</td>
-<td style="text-align: left;">核心逻辑正确，无原理性错误</td>
-</tr>
-<tr>
-<td style="text-align: left;">可落地性</td>
-<td style="text-align: left;">SkipLiveness 需团队有 IL2CPP 修改能力；多线程优化相对普适</td>
-</tr>
-<tr>
-<td style="text-align: left;">风险披露</td>
-<td style="text-align: left;">诚实，作者明确说明了适用范围和危险边界</td>
-</tr>
-<tr>
-<td style="text-align: left;">数据可信度</td>
-<td style="text-align: left;">75% 降幅是单设备单场景参考值，非普适承诺</td>
-</tr>
-</tbody>
-</table>
-<p><strong>没有发现原理性错误。</strong> 主要风险在于 SkipLiveness 的人工审计成本和 IL2CPP 版本兼容性。</p>
-<hr />
+<p><img alt="UI模块CPU耗时平均7.85ms" src="ugui-drawcall-camera_files/2.png" /></p>
 <blockquote>
-<p>原文作者：其乐陶陶 | 来源：<a href="https://blog.uwa4d.com/archives/Usparkle_RUUA.html">UWA 问答 | 博客</a></p>
+<p>从整体曲线来看，渲染模块和UGUI相关耗时的变化趋势非常接近。这种相关性说明，当前渲染开销的波动与UI侧存在较强关联，排查时不能只停留在渲染模块，还需要继续查看UI更新流程。</p>
+</blockquote>
+<p><img alt="渲染模块与UGUI耗时曲线高度相关" src="ugui-drawcall-camera_files/3.png" /></p>
+<blockquote>
+<p>在UI模块中，主要耗时入口是UpdateBatches。该流程负责处理UI元素更新和渲染批次整理。当图片颜色、文本内容或其他UI属性发生变化时，相关Canvas需要更新对应的渲染数据。UI Particle、TMP等相对复杂且更新频繁的对象，也可能增加UI更新开销。</p>
+<p>如果需要进一步定位具体是哪些UI元素频繁触发Canvas更新，可以在Canvas.SendWillRenderCanvases相关流程中进行插桩，在运行时记录触发更新的UI对象，从而找到持续触发Canvas刷新的元素。定位到具体对象后，再结合UI层级、更新频率和使用方式进行针对性优化。<em>具体实现方式可以参考雨松MOMO对UGUI网格重建定位的分析方法：<a href="https://www.xuanyusong.com/archives/4573">《UGUI研究院之找到具体某个引起了网格重建的UI元素(三十二)》</a>。</em></p>
+</blockquote>
+<p><img alt="UpdateBatches 是UI模块主要耗时入口" src="ugui-drawcall-camera_files/4.png" /></p>
+<blockquote>
+<p>如果动态UI和大量静态UI混合在同一个Canvas中，少量元素变化还可能扩大更新影响范围。因此，优化不能只停留在"删掉一些UI"，而应分别处理绘制批次和更新成本：一方面结合渲染调试数据检查各类UI元素的合批情况，确认是否存在不必要的批次拆分；另一方面定位高频变化的UI对象，将需要频繁更新、激活或隐藏的内容与静态UI适当拆分，缩小每次更新影响的范围。</p>
+</blockquote>
+<h2 id="camera">实战案例二：只显示一个模型的Camera，为何耗时仍然很高</h2>
+<p><strong>Q：项目中为了避免特定模型受到近裁剪面的影响，单独增加了一个Camera，用于控制该模型的显示。这个Camera只在特定玩法场景中启用，也只负责该模型的渲染。在一些近距离显示场景中，如果模型距离Camera过近，可能会受到近裁剪面（Near Clip Plane）的影响，导致模型部分区域被裁切或无法正常显示。在本项目中，为了解决这一显示问题，通过额外Camera调整裁剪范围，对该模型进行独立渲染。但从UWA GOT Online报告来看，这个Camera在整个测试过程中的平均耗时已经接近常驻的UI Camera。明明只渲染一个模型，为什么仍会产生这么高的开销？这种情况应该如何优化？</strong></p>
+<p><img alt="额外Camera平均耗时接近UI Camera" src="ugui-drawcall-camera_files/5.png" /></p>
+<blockquote>
+<p><strong>A：</strong> 为了满足特殊显示需求，增加额外Camera是比较常见的做法，但Camera带来的成本并不只取决于它最终绘制了多少个物体。即使最终画面中只有少量内容，新增Camera仍需要单独完成渲染准备、可见性判断、渲染队列处理和指令提交等流程。因此，显示内容数量并不完全等同于Camera自身的渲染成本。</p>
+<p>从UWA GOT Online报告的Stacks节点可以看到，常规场景中存在两个Camera，进入特定玩法后增加到三个，过场阶段又增加到四个。通过Camera数量的变化，可以快速确认额外Camera在哪些场景中启用，并判断数量是否符合预期。</p>
+</blockquote>
+<p><img alt="Stacks节点显示Camera数量变化" src="ugui-drawcall-camera_files/6.png" /></p>
+<blockquote>
+<p>新增Camera仅用于显示单个模型，但平均耗时已经接近一直存在的UI Camera。虽然两者承担的功能不同，不能仅凭耗时接近就认定Camera配置存在异常，但对于这种额外Camera来说，这部分成本已经不能忽略。</p>
+<p>排查时，可以先查看对应Camera的耗时堆栈，确认Culling等相机管线节点占用了多少时间，再分别测试保留原始配置、调整Culling Mask和完全关闭Camera三种状态，从而区分模型渲染成本和Camera额外流程带来的开销。</p>
+<p>Camera配置也需要逐项核对。阴影、后处理、Occlusion Culling、独立RenderTexture等功能是否确有必要，都可能影响最终成本。过场Camera启用后，还要确认主场景Camera和额外Camera是否仍在继续渲染，避免画面已经被覆盖，后方Camera却仍然执行完整流程。</p>
+<p>优化时，应优先控制Camera的启用时机，只在该模型确实需要独立显示时开启，并关闭与当前显示需求无关的功能。完成配置精简后，如果耗时仍然较高，再结合项目使用的渲染管线，评估是否可以将该模型纳入已有Camera渲染流程，或采用Renderer Feature等方式替代额外Camera。</p>
+<p>以上分析并不意味着额外Camera一定不能使用。真正需要关注的是，它带来的画面收益是否与性能成本匹配。当一个仅用于显示单个模型的Camera，其平均耗时已经接近常驻UI Camera时，就应将其列为重点排查对象，避免为了局部显示需求，长期承担一套额外的渲染流程。</p>
 </blockquote>
     </div>
   </article>

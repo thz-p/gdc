@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resources.UnloadUnusedAssets 底层优化方案 - 知识提炼 + 审校</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(9% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(58% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(16% .006 60);
+    --border-light: oklch(20% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(9% .005 60);
+    --quote-border: oklch(74% .135 68 / 0.4);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(50% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(93% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.3);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="" href="#_1">一、核心痛点</a>
+<a class="toc-h3" href="#_2">下调执行时机</a>
+<a class="" href="#5">二、执行流程拆解（5 阶段）</a>
+<a class="" href="#skipliveness">三、优化方案一：标记跳过（SkipLiveness）</a>
+<a class="toc-h3" href="#_3">借位零开销</a>
+<a class="toc-h3" href="#_4">三类标记的生效情况</a>
+<a class="toc-h3" href="#gc_desc">陷阱：gc_desc 是禁区</a>
+<a class="toc-h3" href="#_5">适用范围</a>
+<a class="" href="#-">四、优化方案二：多线程生产者-消费者模型</a>
+<a class="toc-h3" href="#_6">问题</a>
+<a class="toc-h3" href="#_7">改造</a>
+<a class="toc-h3" href="#_8">设计要点</a>
+<a class="" href="#_9">五、实测效果</a>
+<a class="" href="#_10">六、更高层面思考</a>
+<a class="toc-h3" href="#61">6.1 自动标记</a>
+<a class="toc-h3" href="#62">6.2 三层架构</a>
+<a class="toc-h3" href="#63-ue">6.3 UE 对照</a>
+<a class="" href="#_11">附：优化方案审校</a>
+<a class="toc-h3" href="#skipliveness_1">SkipLiveness 标记跳过</a>
+<a class="toc-h3" href="#-_1">多线程生产者-消费者模型</a>
+<a class="toc-h3" href="#_12">综合结论</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/Usparkle_RUUA.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>其乐陶陶</span>
+      </div>
+      <h1>Resources.UnloadUnusedAssets 底层优化方案 - 知识提炼 + 审校</h1>
+      <div class="read-time">约 12 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">性能优化</span>
+<span class="tag">IL2CPP</span>
+<span class="tag">GC</span>
+<span class="tag">多线程</span>
+<span class="tag">Resources.UnloadUnusedAssets</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <h2 id="_1">一、核心痛点</h2>
+<p>每次切场景，<code>Resources.UnloadUnusedAssets</code> 在主线程同步阻塞 <strong>200~300ms</strong>（低端机甚至到秒级）。标注的"异步"仅是延迟一帧，<strong>主线程并未逃脱阻塞</strong>。</p>
+<div class="codehilite"><pre><span></span><code><span class="n">Resources</span><span class="p">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span><span class="w">  </span><span class="c1">// 看似异步，实则阻塞主线程 200ms+</span>
+</code></pre></div>
+
+<h3 id="_2">下调执行时机</h3>
+<p>方案不解决"为什么慢"，但解决"什么时候慢"。把不可控的延迟变成可控的延迟。</p>
+<div class="codehilite"><pre><span></span><code><span class="n">Resources</span><span class="p">.</span><span class="n">UnloadUnusedAssets</span><span class="p">();</span>
+<span class="n">WaitForAllOperationsToComplete</span><span class="p">();</span><span class="w">  </span><span class="c1">// 等 GC 跑完再跳战斗</span>
+<span class="n">SendMarkLoadingComplete</span><span class="p">();</span>
+</code></pre></div>
+
+<hr />
+<h2 id="5">二、执行流程拆解（5 阶段）</h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>耗时占比</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① FindAllLiveObjects</td>
+<td>低</td>
+<td>枚举所有 Native 对象</td>
+</tr>
+<tr>
+<td>② MarkSceneRoots</td>
+<td>低</td>
+<td>标记场景根/Manager 根为存活</td>
+</tr>
+<tr>
+<td>③ CreateObjectToIndexMapping</td>
+<td>低</td>
+<td>建 InstanceID → 索引哈希表</td>
+</tr>
+<tr>
+<td><strong>④a MarkStaticDependencies</strong></td>
+<td><strong>~49%</strong></td>
+<td>遍历 C# 静态字段，递归扫描托管堆。<strong>最大热点</strong></td>
+</tr>
+<tr>
+<td><strong>④b MarkNormalDependencies</strong></td>
+<td><strong>~39%</strong></td>
+<td>在 Native 对象图上做 BFS</td>
+</tr>
+<tr>
+<td>⑤ CleanupUnusedObjects</td>
+<td>低</td>
+<td>释放未标记的 Native 资源</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>④a + ④b 合计占 <strong>~88%</strong> 总耗时，是整个优化的主攻方向。</p>
+</blockquote>
+<hr />
+<h2 id="skipliveness">三、优化方案一：标记跳过（SkipLiveness）</h2>
+<p><strong>思路</strong>：让 GC 扫描器看到"不必扫的字段/类"就跳过，减少 ④a 的遍历范围。</p>
+<h3 id="_3">借位零开销</h3>
+<p>在 IL2CPP 元数据的空闲位做标记，运行时一条位与指令判断，O(1)，零内存开销：</p>
+<ul>
+<li>字段级：<code>field.attrs</code> 位 3 → <code>FIELD_ATTRIBUTE_SKIP_LIVENESS 0x0008</code></li>
+<li>类级：<code>klass.flags</code> 位 22 → <code>TYPE_ATTRIBUTE_SKIP_LIVENESS 0x00400000</code></li>
+</ul>
+<div class="codehilite"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">field</span><span class="o">-&gt;</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">attrs</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="n">FIELD_ATTRIBUTE_SKIP_LIVENESS</span><span class="p">)</span>
+<span class="w">    </span><span class="k">continue</span><span class="p">;</span><span class="w">  </span><span class="c1">// 跳过这个字段的 Liveness 扫描</span>
+</code></pre></div>
+
+<h3 id="_4">三类标记的生效情况</h3>
+<table>
+<thead>
+<tr>
+<th>标记位置</th>
+<th>是否生效</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类级 <code>[SkipLiveness]</code></td>
+<td>✅ 生效</td>
+<td>整个类的实例跳过 Liveness 递归</td>
+</tr>
+<tr>
+<td>静态字段 <code>[SkipLiveness]</code></td>
+<td>✅ 生效</td>
+<td>单个静态字段跳过</td>
+</tr>
+<tr>
+<td>实例字段 <code>[SkipLiveness]</code></td>
+<td>❌ 失效</td>
+<td>实例对象走 gc_desc 位图快速路径，不查字段元数据</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gc_desc">陷阱：gc_desc 是禁区</h3>
+<p>gc_desc 不只 Liveness 在用，<strong>Boehm GC 分配内存时也用它</strong>做精确扫描。如果在 gc_desc 里排除字段，Boehm GC 也会跳过，导致字段引用的对象被错误回收，引发<strong>野指针崩溃</strong>。</p>
+<h3 id="_5">适用范围</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">安全（可标记）</th>
+<th style="text-align: left;">危险（不可标记）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">游戏配置表（纯数据）</td>
+<td style="text-align: left;">持有 Resources.Load 加载的资源</td>
+</tr>
+<tr>
+<td style="text-align: left;">帧同步层对象（无引擎引用）</td>
+<td style="text-align: left;">持有 AssetBundle 加载的 Native 引用</td>
+</tr>
+<tr>
+<td style="text-align: left;">服务器协议对象</td>
+<td style="text-align: left;">持有动态生成未挂场景的 Material/Texture/Mesh</td>
+</tr>
+<tr>
+<td style="text-align: left;">其他纯数据结构</td>
+<td style="text-align: left;">任何拿不准的对象</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="-">四、优化方案二：多线程生产者-消费者模型</h2>
+<h3 id="_6">问题</h3>
+<p>Worker 处理完<strong>初始根（场景根+Manager 根）</strong>后闲置，等待主线程跑完 FromStatics。</p>
+<h3 id="_7">改造</h3>
+<p>引入<strong>读写索引分离的共享队列</strong>，主线程（生产者）实时投放新 Root，Worker（消费者）持续消费，闲置窗口压到接近零。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// 生产者（主线程）</span>
+<span class="n">buf</span><span class="p">[</span><span class="n">writeIndex</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">index</span><span class="p">;</span>
+<span class="n">atomic_store</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">writeIndex</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">release</span><span class="p">);</span>
+
+<span class="c1">// 消费者（Worker）— 多消费者用 CAS 抢 slot</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(;;)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">readIndex</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">w</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">writeIndex</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">r</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">w</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">atomic_load</span><span class="p">(</span><span class="o">&amp;</span><span class="n">scanComplete</span><span class="p">,</span><span class="w"> </span><span class="n">acquire</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">readIndex</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="n">writeIndex</span><span class="p">)</span>
+<span class="w">            </span><span class="k">break</span><span class="p">;</span>
+<span class="w">        </span><span class="n">YieldProcessor</span><span class="p">();</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">CAS</span><span class="p">(</span><span class="o">&amp;</span><span class="n">readIndex</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="k">continue</span><span class="p">;</span>
+<span class="w">    </span><span class="n">MarkDependencies</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">r</span><span class="p">]);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="_8">设计要点</h3>
+<ul>
+<li><strong>写顺序</strong>：数据先落，索引后发布（Release/Acquire 语义）</li>
+<li><strong>CAS 抢 readIndex</strong>：多消费者只有一个能成功，无锁</li>
+<li><strong>不用 Ring Buffer</strong>：容量按上界 Reserve，索引单调推进到底</li>
+<li><strong>复用 JobSystem Worker 线程</strong>：不额外开线程池，避免移动端 1MB 栈内存浪费</li>
+</ul>
+<hr />
+<h2 id="_9">五、实测效果</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">机型</th>
+<th style="text-align: left;">优化前</th>
+<th style="text-align: left;">优化后</th>
+<th style="text-align: left;">降幅</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">骁龙 865 (1+8pro)</td>
+<td style="text-align: left;">~200ms</td>
+<td style="text-align: left;">~50ms</td>
+<td style="text-align: left;"><strong>75%</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_10">六、更高层面思考</h2>
+<h3 id="61">6.1 自动标记</h3>
+<p>IL2CPP 代码生成器在编译期做<strong>静态可达性分析</strong>，自动给"闭包不可达 <code>UnityEngine.Object</code>"的 sealed 类打上标记。</p>
+<div class="codehilite"><pre><span></span><code><span class="kt">bool</span><span class="w"> </span><span class="nf">CanReachUnityObject</span><span class="p">(</span><span class="n">TypeDef</span><span class="w"> </span><span class="n">t</span><span class="p">,</span><span class="w"> </span><span class="n">HashSet</span><span class="o">&lt;</span><span class="n">TypeDef</span><span class="o">&gt;</span><span class="w"> </span><span class="n">visited</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">visited</span><span class="p">.</span><span class="n">Add</span><span class="p">(</span><span class="n">t</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">t</span><span class="p">.</span><span class="n">IsSubclassOf</span><span class="p">(</span><span class="s">&quot;UnityEngine.Object&quot;</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<span class="w">    </span><span class="k">foreach</span><span class="w"> </span><span class="p">(</span><span class="kt">var</span><span class="w"> </span><span class="n">f</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">t</span><span class="p">.</span><span class="n">InstanceFields</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kt">var</span><span class="w"> </span><span class="n">ft</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="n">FieldType</span><span class="p">.</span><span class="n">Resolve</span><span class="p">();</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">ft</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="k">null</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">ft</span><span class="p">.</span><span class="n">IsInterface</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="n">ft</span><span class="p">.</span><span class="n">IsSealed</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">CanReachUnityObject</span><span class="p">(</span><span class="n">ft</span><span class="p">,</span><span class="w"> </span><span class="n">visited</span><span class="p">))</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="62">6.2 三层架构</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">层级</th>
+<th style="text-align: left;">职责</th>
+<th style="text-align: left;">解决什么问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">资源框架（Addressables/YooAsset）</td>
+<td style="text-align: left;">显式 Refcount 管理资源生命周期</td>
+<td style="text-align: left;">结构性：解决"该谁释放"的所有权问题</td>
+</tr>
+<tr>
+<td style="text-align: left;">本文的两个优化</td>
+<td style="text-align: left;">扫描尽可能快</td>
+<td style="text-align: left;">局部性：在不能改 API 的前提下做到上限</td>
+</tr>
+<tr>
+<td style="text-align: left;">HideFlags</td>
+<td style="text-align: left;">关键资源不丢</td>
+<td style="text-align: left;">兜底：将判错后果从崩溃降级为内存多占</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-ue">6.3 UE 对照</h3>
+<p>UE 有类似的 GC 卡顿问题（Fortnite 的 GC Mark 从 ~66ms 压到 ~22ms）。但 UE 的 UObject 是 <strong>GC-aware 设计</strong>，修补成本更低。Unity 的痛点根因在于<strong>双对象世界</strong>（C++ Native + C# Managed 两张图），IL2CPP 是额外的一道墙。</p>
+<blockquote>
+<p>200ms 不是 Unity 独有的，而是"全图可达性扫描"这个通病在双对象世界里的重症形态。</p>
+</blockquote>
+<hr />
+<h2 id="_11">附：优化方案审校</h2>
+<h3 id="skipliveness_1">SkipLiveness 标记跳过</h3>
+<p><strong>✅ 技术原理正确。</strong> IL2CPP 元数据存在空闲位、静态字段与实例字段走不同扫描路径、gc_desc 是 Boehm GC 共享禁区——这些关键判断均准确无误。</p>
+<p><strong>⚠️ 主要风险：</strong>
+- <strong>IL2CPP 版本升级</strong>：借用的空闲位可能在 Unity 升级时被官方占用，不会收到通知，需每次跨版本做二进制比对
+- <strong>人工审计负担</strong>：中大型项目的类型闭包极复杂，人工可达性分析容易漏审。漏标后果是运行时崩溃，排查成本极高
+- <strong>has_references 截断风险</strong>：<code>has_references &amp;&amp; !skip</code> 会将整个类的 Native 引用链全部截断——如果类中混入一个持 Resources.Load 引用的字段，该资源会被误回收</p>
+<p><strong>🔧 可行性：</strong> 技术上可行，但需团队具备 IL2CPP 运行时 + 代码生成器的修改能力，建议搭配自动静态分析一起做。</p>
+<h3 id="-_1">多线程生产者-消费者模型</h3>
+<p><strong>✅ 设计合理。</strong> 读写索引分离、Release/Acquire 内存序、CAS 抢 readIndex、复用 JobSystem Worker 线程——这些设计决策均正确且务实。</p>
+<p><strong>⚠️ 需要注意的细节：</strong>
+- <strong>scanComplete 同步</strong>：主线程必须写完所有数据后才设置 <code>scanComplete = true</code>，且用 release 语义保证 Worker 的 acquire 能看到所有前置写入
+- <strong>忙等对移动端的影响</strong>：<code>YieldProcessor</code> spin-wait 在低端机上可能影响功耗和发热
+- <strong>Worker 线程可用性</strong>：大部分情况下 JobSystem 在 GC 期间无其他任务，但并非绝对保证</p>
+<p><strong>🔧 可行性：</strong> 高度可行，本质上是 Unity 2022 官方多线程 GC 实现思路的复现。</p>
+<h3 id="_12">综合结论</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">维度</th>
+<th style="text-align: left;">评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">技术深度</td>
+<td style="text-align: left;">优秀，对 IL2CPP 运行时和 GC 流程理解准确</td>
+</tr>
+<tr>
+<td style="text-align: left;">正确性</td>
+<td style="text-align: left;">核心逻辑正确，无原理性错误</td>
+</tr>
+<tr>
+<td style="text-align: left;">可落地性</td>
+<td style="text-align: left;">SkipLiveness 需团队有 IL2CPP 修改能力；多线程优化相对普适</td>
+</tr>
+<tr>
+<td style="text-align: left;">风险披露</td>
+<td style="text-align: left;">诚实，作者明确说明了适用范围和危险边界</td>
+</tr>
+<tr>
+<td style="text-align: left;">数据可信度</td>
+<td style="text-align: left;">75% 降幅是单设备单场景参考值，非普适承诺</td>
+</tr>
+</tbody>
+</table>
+<p><strong>没有发现原理性错误。</strong> 主要风险在于 SkipLiveness 的人工审计成本和 IL2CPP 版本兼容性。</p>
+<hr />
+<blockquote>
+<p>原文作者：其乐陶陶 | 来源：<a href="https://blog.uwa4d.com/archives/Usparkle_RUUA.html">UWA 问答 | 博客</a></p>
+</blockquote>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+
+  })();
+</script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+<script data-goatcounter="https://gdc.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

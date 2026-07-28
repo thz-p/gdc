@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1个额外相机、400个DrawCall - 知识提炼 + 审校</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(9% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(58% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(16% .006 60);
+    --border-light: oklch(20% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(9% .005 60);
+    --quote-border: oklch(74% .135 68 / 0.4);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(50% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(93% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.3);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="" href="#_1">一、核心认知</a>
+<a class="" href="#ui-drawcall-400">二、案例一：UI 简单，DrawCall 为何接近 400</a>
+<a class="toc-h3" href="#_2">现象</a>
+<a class="toc-h3" href="#_3">根因</a>
+<a class="toc-h3" href="#_4">定位路径</a>
+<a class="toc-h3" href="#_5">优化方向</a>
+<a class="" href="#camera-ui-camera">三、案例二：单模型额外 Camera 耗时接近 UI Camera</a>
+<a class="toc-h3" href="#_6">现象</a>
+<a class="toc-h3" href="#_7">根因</a>
+<a class="toc-h3" href="#_8">定位路径</a>
+<a class="toc-h3" href="#_9">优化方向</a>
+<a class="toc-h3" href="#_10">判断标准</a>
+<a class="" href="#_11">四、可复用的排查思路</a>
+<a class="" href="#_12">附：方案审校</a>
+<a class="toc-h3" href="#_13">案例一审校</a>
+<a class="toc-h3" href="#_14">案例二审校</a>
+<a class="toc-h3" href="#_15">综合结论</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/TechSharing_486.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>UWA 社区</span>
+      </div>
+      <h1>1个额外相机、400个DrawCall - 知识提炼 + 审校</h1>
+      <div class="read-time">约 8 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">UGUI</span>
+<span class="tag">DrawCall</span>
+<span class="tag">Camera</span>
+<span class="tag">渲染优化</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <h2 id="_1">一、核心认知</h2>
+<blockquote>
+<p><strong>视觉复杂度 ≠ 渲染开销。</strong> UI 画面看起来不拥挤，但只要产生大量独立绘制批次，渲染提交开销照样高；Camera 只渲染一个物体，也仍需完整走一遍渲染准备、可见性判断、队列处理、指令提交流程。</p>
+</blockquote>
+<p>本篇来自 UWA 第 486 期技术分享，两个案例都是"画面简单但开销高"的典型反直觉问题。</p>
+<hr />
+<h2 id="ui-drawcall-400">二、案例一：UI 简单，DrawCall 为何接近 400</h2>
+<h3 id="_2">现象</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">指标</th>
+<th style="text-align: left;">数值</th>
+<th style="text-align: left;">说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Canvas.RenderSubBatch 峰值</td>
+<td style="text-align: left;"><strong>394 次</strong></td>
+<td style="text-align: left;">该节点调用次数 ≈ UGUI DrawCall 数</td>
+</tr>
+<tr>
+<td style="text-align: left;">UGUI DrawCall</td>
+<td style="text-align: left;"><strong>300~400</strong></td>
+<td style="text-align: left;">UI 侧提交批次处于高水平</td>
+</tr>
+<tr>
+<td style="text-align: left;">UI 模块 CPU 均耗时</td>
+<td style="text-align: left;"><strong>7.85ms</strong></td>
+<td style="text-align: left;">60FPS 帧预算 16.67ms，UI 占近一半</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_3">根因</h3>
+<ul>
+<li>玩法表现通过 UI 组件实现，叠加 UI 特效、TMP 文本，实际参与渲染/更新的 UI 对象很多</li>
+<li><strong>动态 UI 与大量静态 UI 混在同一 Canvas</strong>，少量元素变化扩大更新影响范围</li>
+<li>主要耗时入口是 <code>UpdateBatches</code>（处理 UI 元素更新和渲染批次整理）</li>
+</ul>
+<h3 id="_4">定位路径</h3>
+<ol>
+<li>看 <code>Canvas.RenderSubBatch</code> 调用次数 → 观察 UGUI DrawCall 变化</li>
+<li>看渲染模块与 UGUI 耗时曲线<strong>相关性</strong> → 强相关说明波动来自 UI 侧</li>
+<li>在 <code>Canvas.SendWillRenderCanvases</code> 插桩，运行时记录触发更新的 UI 对象（参考<a href="https://www.xuanyusong.com/archives/4573">雨松MOMO 网格重建定位法</a>）</li>
+</ol>
+<h3 id="_5">优化方向</h3>
+<ul>
+<li>检查各类 UI 元素合批情况，消除不必要的批次拆分</li>
+<li><strong>高频变化 UI 与静态 UI 拆分到不同 Canvas</strong>，缩小每次更新影响范围</li>
+</ul>
+<hr />
+<h2 id="camera-ui-camera">三、案例二：单模型额外 Camera 耗时接近 UI Camera</h2>
+<h3 id="_6">现象</h3>
+<p>为避免近裁剪面裁切模型，加了一个<strong>只渲染该模型</strong>的额外 Camera，平均耗时却<strong>接近常驻 UI Camera</strong>。</p>
+<h3 id="_7">根因</h3>
+<blockquote>
+<p>Camera 的成本不只取决于它绘制了多少物体。</p>
+</blockquote>
+<p>即使画面只有少量内容，新增 Camera 仍需独立完成：渲染准备 → 可见性判断 → 渲染队列处理 → 指令提交。<strong>显示内容数量 ≠ Camera 渲染成本</strong>。</p>
+<h3 id="_8">定位路径</h3>
+<ol>
+<li>看 <strong>Stacks 节点</strong>确认 Camera 数量变化（常规 2 个 → 玩法 3 个 → 过场 4 个）</li>
+<li>查 Camera 耗时堆栈，确认 <code>Culling</code> 等管线节点占比</li>
+<li><strong>三态对比测试</strong>：保留原配置 / 调整 Culling Mask / 完全关闭，区分模型渲染成本与 Camera 流程开销</li>
+<li>逐项核对：阴影、后处理、Occlusion Culling、独立 RenderTexture 是否必要</li>
+<li>确认过场时主场景 Camera 与额外 Camera 是否<strong>重复渲染</strong></li>
+</ol>
+<h3 id="_9">优化方向</h3>
+<ul>
+<li>控制 Camera 启用时机，仅在需要时开启</li>
+<li>关闭与当前显示需求无关的功能</li>
+<li>配置精简后仍高 → 评估<strong>纳入已有 Camera 流程</strong>或用 <strong>Renderer Feature</strong> 替代额外 Camera</li>
+</ul>
+<h3 id="_10">判断标准</h3>
+<blockquote>
+<p>当一个仅用于显示单个模型的 Camera，其平均耗时已经接近常驻 UI Camera 时，就应将其列为重点排查对象。</p>
+</blockquote>
+<hr />
+<h2 id="_11">四、可复用的排查思路</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">问题特征</th>
+<th style="text-align: left;">第一切入点</th>
+<th style="text-align: left;">关键指标/工具</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">画面简单但 UI 开销高</td>
+<td style="text-align: left;">DrawCall 数 &amp; UpdateBatches</td>
+<td style="text-align: left;">Canvas.RenderSubBatch、SendWillRenderCanvases 插桩</td>
+</tr>
+<tr>
+<td style="text-align: left;">画面简单但渲染耗时高</td>
+<td style="text-align: left;">Camera 数量 &amp; 堆栈</td>
+<td style="text-align: left;">Stacks 节点、Culling 耗时、三态对比</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_12">附：方案审校</h2>
+<h3 id="_13">案例一审校</h3>
+<p><strong>✅ 正确。</strong> "视觉复杂度 ≠ 渲染开销"是 UGUI 性能分析的核心前提。RenderSubBatch 调用次数近似 DrawCall 数、UpdateBatches 是主要耗时入口、动态/静态 UI 混合扩大重建范围，这些判断均符合 UGUI 实现机制。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- DrawCall 高不一定是性能瓶颈，需结合 SetPass Call（材质切换次数）一起看，SetPass Call 才是真正的 GPU 状态切换成本
+- TMP 文本除破坏合批外，<strong>字体图集（Atlas）溢出</strong>会触发重建且易被忽略，排查时应检查 Atlas 使用率
+- 拆分 Canvas 能缩小重建范围，但<strong>会增加 DrawCall</strong>（Canvas 之间不合批），需在"重建成本"与"合批收益"间权衡，不是越细越好</p>
+<p><strong>🔧 可行性：</strong> 高。SendWillRenderCanvases 插桩定位法成熟可靠，雨松MOMO 的方案可直接复用。</p>
+<h3 id="_14">案例二审校</h3>
+<p><strong>✅ 正确。</strong> "Camera 成本不取决于绘制物体数量"判断准确。Camera 的固定管线开销（Culling、阴影投射、后处理等）确实与可见物体数量弱相关。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- 额外 Camera 若开启<strong>阴影</strong>，会参与全局 ShadowMap 渲染，成本可能远超模型本身
+- 额外 Camera 渲染到独立 RenderTexture 时，<strong>RT 的分辨率和格式</strong>对带宽/显存影响大，需核对
+- "纳入已有 Camera 流程"需注意<strong>渲染顺序和 Clear 标志</strong>，否则可能引入深度冲突或画面错乱
+- URP 下用 Renderer Feature 替代额外 Camera 是更优解，但需确认 Feature 的渲染时机（BeforeRendering/Opaque 等）符合需求</p>
+<p><strong>🔧 可行性：</strong> 高。三态对比测试是排查 Camera 开销的标准方法论，结论可信。</p>
+<h3 id="_15">综合结论</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">维度</th>
+<th style="text-align: left;">评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">技术深度</td>
+<td style="text-align: left;">良好，准确点出 UGUI 与 Camera 开销的反直觉特性</td>
+</tr>
+<tr>
+<td style="text-align: left;">正确性</td>
+<td style="text-align: left;">核心判断无误，无原理性错误</td>
+</tr>
+<tr>
+<td style="text-align: left;">可落地性</td>
+<td style="text-align: left;">高，定位路径具体可操作</td>
+</tr>
+<tr>
+<td style="text-align: left;">风险披露</td>
+<td style="text-align: left;">诚实，明确说明"耗时接近 ≠ 配置异常"，避免误判</td>
+</tr>
+<tr>
+<td style="text-align: left;">数据可信度</td>
+<td style="text-align: left;">394 次、7.85ms 为单项目实测参考值，非普适阈值</td>
+</tr>
+</tbody>
+</table>
+<p><strong>没有发现原理性错误。</strong> 主要提醒：DrawCall 数应结合 SetPass Call 看；拆分 Canvas 需权衡重建与合批；额外 Camera 的阴影/RT 成本易被低估。</p>
+<hr />
+<blockquote>
+<p>原文来源：<a href="https://blog.uwa4d.com/archives/TechSharing_486.html">UWA 问答 | 博客</a> | 第 486 篇技术分享</p>
+</blockquote>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+
+  })();
+</script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+<script data-goatcounter="https://gdc.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
