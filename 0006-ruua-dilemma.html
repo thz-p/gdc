@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资源回收“两头堵”：RUUA调了会卡，不调内存又涨</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(10% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(65% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(18% .006 60);
+    --border-light: oklch(22% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(12% .006 60);
+    --quote-border: oklch(74% .135 68 / 0.55);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(42% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(90% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.5);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="" href="#ruua">实战案例一：RUUA 调了会卡，不调内存又涨</a>
+<a class="" href="#mono">实战案例二：Mono 与其它同时偏高，应该优先优化谁</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/TechSharing_483.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>UWA 社区</span>
+      </div>
+      <h1>资源回收“两头堵”：RUUA调了会卡，不调内存又涨</h1>
+      <div class="read-time">约 6 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">RUUA</span>
+<span class="tag">内存</span>
+<span class="tag">AssetBundle</span>
+<span class="tag">Mono</span>
+<span class="tag">性能优化</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <p>1）资源回收未生效的典型排查路径<br />
+2）Mono与其它同时偏高时，应该优先优化谁</p>
+<hr />
+<h2 id="ruua">实战案例一：RUUA 调了会卡，不调内存又涨</h2>
+<p><strong>Q：为了控制内存增长，我们把Resources.UnloadUnusedAssets（RUUA）挂在打开背包、地图这类全屏UI上执行。结果调用了UI会卡，不调用内存又一直涨。我们项目是无缝地图，没有切场景的天然时机，感觉怎么选都不对。UnloadUnusedAssets到底该什么时候调用？开放世界项目如何解决这种"两头堵"的问题？</strong></p>
+<p><img alt="Asset 数量曲线" src="0006-ruua-dilemma_files/1.png" /></p>
+<blockquote>
+<p><strong>A：</strong> 很多团队遇到这个问题，第一反应都是继续调整UnloadUnusedAssets的调用时机，但大多数情况下，真正的问题并不在"什么时候调用"，而在于"这次调用有没有真正回收到资源"。</p>
+<p>建议先打开UWA GOT Online分析报告，查看Asset数量曲线，重点关注每次RUUA调用点前后的变化。正常情况下，如果RUUA真正生效，Asset数量通常会出现明显下降；如果曲线几乎没有变化，就说明这次调用很可能没有释放任何资源，属于一次"空跑"。</p>
+</blockquote>
+<p><img alt="RUUA 调用前后 Asset 曲线" src="0006-ruua-dilemma_files/2.png" /></p>
+<blockquote>
+<p>这种情况，问题往往不是RUUA没调用，而是对应的AssetBundle并没有真正卸载。如果AssetBundle仍保持加载状态，其中包含的资源通常无法进入可释放状态，RUUA即使执行，也可能找不到可回收对象。结果就是白白做了一次资源扫描，不仅没有释放资源，还额外带来一次主线程卡顿。</p>
+<p><strong>因此，排查顺序建议反过来：先确认RUUA是否真的释放了资源，再检查调用时机，而不是一开始就不停调整调用位置。如果Asset曲线没有明显变化，就优先检查AssetBundle的卸载策略。</strong></p>
+<p>当然，也有一种情况属于设计使然。项目为了避免资源反复加载带来的卡顿，通常会主动缓存一部分AssetBundle。如果这些Bundle本身就是计划常驻内存，那么RUUA自然也无法回收其中的资源。这种情况下，更合理的做法不是频繁调用RUUA，而是建立AssetBundle分级缓存机制，例如根据最近访问时间（LRU）、玩家当前位置或距离管理Bundle生命周期，让高优先级资源保持常驻，低优先级Bundle在Application.lowMemory等系统内存紧张事件触发时统一卸载，再执行资源回收。</p>
+<p>至于调用时机，目前业内比较常见的做法主要有两种：固定时间间隔轮询，例如每5～10分钟执行一次；或者监听Application.lowMemory回调，在系统内存压力较大时再主动回收。将RUUA挂在打开背包、地图等全屏UI上也并非不可行，因为玩家通常能够接受这类界面存在一定的等待时间，但前提是这次调用必须真正有收益，而不是一次没有任何效果的"空跑"。因此，与其不断调整RUUA的调用时机，不如先确认它是否真正回收了资源，再决定后续的优化方向。</p>
+</blockquote>
+<h2 id="mono">实战案例二：Mono 与其它同时偏高，应该优先优化谁</h2>
+<p><strong>Q：我们项目Mono峰值已经到了400MB，Reserved Total里还有接近1GB的其它，Memory Profiler又定位不到来源。这种情况到底该先压Mono，还是先查其它？</strong></p>
+<p><img alt="Mono 400MB 与 Reserved Total 1GB" src="0006-ruua-dilemma_files/3.png" /></p>
+<blockquote>
+<p><strong>A：</strong> 很多团队看到Mono超过400MB，第一反应就是优化GC、对象池，甚至重构代码。但很多时候，真正占用内存最多、也最容易被忽略的，并不是Mono，而是那块来源复杂、定位困难的"其它"。</p>
+<p>Mono是否合理，并没有一个固定的"标准值"，真正应该先确定的是整机的PSS总预算。对于3GB RAM设备，通常建议将PSS控制在约1.3～1.5GB；4GB RAM设备建议控制在约1.8～2.2GB。更高内存设备虽然预算更宽松，但也并不是可以无限增长，即使是8GB RAM设备，当进程PSS持续接近3GB，在系统可用内存紧张或存在持续泄漏的情况下，仍然有被系统回收的风险。相比Android，iOS的预算通常还需要更加保守。</p>
+</blockquote>
+<p><img alt="PSS 预算参考" src="0006-ruua-dilemma_files/4.png" /></p>
+<blockquote>
+<p>PSS总预算确定之后，Mono、纹理、Mesh、音频、Native等模块，其实都是在同一份预算里分配空间。也就是说，Mono如果希望多占用100MB，就意味着其他模块需要相应减少100MB。因此，400MB的Mono是否合理，并不能脱离整个项目的内存预算单独判断，而应该结合各模块的内存占用综合评估。</p>
+</blockquote>
+<p><img alt="各模块内存占用分布" src="0006-ruua-dilemma_files/5.png" /></p>
+<blockquote>
+<p>如果"其它"已经接近1GB，那么相比继续压缩Mono，更建议优先弄清楚这部分内存到底来自哪里。排查时可以先使用Memory Profiler分析内存快照，如果能够直接定位到来源，就优先解决对应问题；如果Memory Profiler无法解释这部分内存，再进一步结合UWA Gears或Android Studio排查Native Heap，重点关注Unity无法直接归类的Native分配。如果怀疑来自Lua或其他脚本引擎产生的Native内存，还可以进一步使用Perfetto做符号化分析，定位具体的分配来源。</p>
+<p>另外需要注意的是，Android系统以及Unity无法进一步细分归类的一部分Native内存，也可能表现为"其它"，因此分析"其它"时建议结合Memory Profiler、Native Heap分析工具以及运行时数据进行交叉验证，而不要仅凭单一工具下结论。</p>
+</blockquote>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+
+  })();
+</script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+<script data-goatcounter="https://gdc.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
