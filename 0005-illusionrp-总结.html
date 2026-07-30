@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IllusionRP角色渲染管线 - 知识提炼 + 审校</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(10% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(65% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(18% .006 60);
+    --border-light: oklch(22% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(12% .006 60);
+    --quote-border: oklch(74% .135 68 / 0.55);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(42% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(90% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.5);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="" href="#_1">一、设计背景</a>
+<a class="" href="#_2">二、主要拓展</a>
+<a class="toc-h3" href="#shading">Shading 着色器</a>
+<a class="toc-h3" href="#rendering">Rendering 渲染功能</a>
+<a class="toc-h3" href="#workflow">Workflow 工作流</a>
+<a class="" href="#_3">三、关键实现细节</a>
+<a class="toc-h3" href="#_4">阴影</a>
+<a class="toc-h3" href="#_5">屏幕空间光照</a>
+<a class="toc-h3" href="#_6">全局光照</a>
+<a class="toc-h3" href="#_7">后处理</a>
+<a class="toc-h3" href="#_8">构建</a>
+<a class="" href="#_9">四、可复用经验</a>
+<a class="" href="#_10">附：方案审校</a>
+<a class="toc-h3" href="#_11">架构设计</a>
+<a class="toc-h3" href="#shader">Shader 实现</a>
+<a class="toc-h3" href="#_12">阴影与全局光照</a>
+<a class="toc-h3" href="#_13">构建与变体管理</a>
+<a class="toc-h3" href="#_14">综合结论</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/Usparkle_IllusionRP.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>AkiKurisu</span>
+      </div>
+      <h1>IllusionRP角色渲染管线 - 知识提炼 + 审校</h1>
+      <div class="read-time">约 10 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">URP</span>
+<span class="tag">渲染管线</span>
+<span class="tag">Shader</span>
+<span class="tag">移动端</span>
+<span class="tag">角色渲染</span>
+<span class="tag">IllusionRP</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <h2 id="_1">一、设计背景</h2>
+<p>URP 在移动端角色渲染质量上存在短板，而 HDRP 不适用于移动端。作者在 URP 基础上用 RendererFeature 搭建了一层管线（IllusionRP），将 HDRP 的渲染功能迁移到移动端，未侵入式修改 URP 源码。</p>
+<p><strong>选型对比：</strong></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">方案</th>
+<th style="text-align: left;">优点</th>
+<th style="text-align: left;">缺点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">直接用 HDRP</td>
+<td style="text-align: left;">功能丰富</td>
+<td style="text-align: left;">依赖 ComputeShader，不适用于移动端</td>
+</tr>
+<tr>
+<td style="text-align: left;">URP 加插件</td>
+<td style="text-align: left;">灵活，社区协作</td>
+<td style="text-align: left;">功能碎片化，整合优化成本高</td>
+</tr>
+<tr>
+<td style="text-align: left;">自写 SRP</td>
+<td style="text-align: left;">完全可控</td>
+<td style="text-align: left;">难以随引擎升级，维护成本高</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>IllusionRP（选型）</strong></td>
+<td style="text-align: left;"><strong>无缝衔接 URP，功能集中，可升级</strong></td>
+<td style="text-align: left;"><strong>需自行实现 HDRP 级功能</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">二、主要拓展</h2>
+<h3 id="shading">Shading 着色器</h3>
+<p>新增 3 个 ShadingModel：
+- <strong>Skin</strong>：SSSS 屏幕空间次表面散射 + 双镜叶高光模拟油脂层
+- <strong>Hair</strong>：KajiyaKay / Marschner 双模型 + 背面体积散射
+- <strong>Fabric</strong>：各向异性高光 + Ashikhmin/Charlie Sheen 散射</p>
+<h3 id="rendering">Rendering 渲染功能</h3>
+<p>集成了 15 项功能，核心推荐：「PerObjectShadow + GTAO + SSSS」是提升角色渲染质量性价比最高的三项。</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">类别</th>
+<th style="text-align: left;">功能</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">阴影</td>
+<td style="text-align: left;">PerObjectShadow、PCSS、Contact Shadows</td>
+</tr>
+<tr>
+<td style="text-align: left;">屏幕空间光照</td>
+<td style="text-align: left;">GTAO、SSR、SSSS、SSGI</td>
+</tr>
+<tr>
+<td style="text-align: left;">全局光照</td>
+<td style="text-align: left;">PRTGI + SSGI 组合</td>
+</tr>
+<tr>
+<td style="text-align: left;">半透明</td>
+<td style="text-align: left;">OIT 顺序无关透明</td>
+</tr>
+<tr>
+<td style="text-align: left;">后处理</td>
+<td style="text-align: left;">Volumetric Fog、Convolution Bloom、Auto Exposure、GT &amp; ACES Tonemapping</td>
+</tr>
+</tbody>
+</table>
+<h3 id="workflow">Workflow 工作流</h3>
+<ul>
+<li>着色器开发：ASE 模板，分离设计层与模型层</li>
+<li>效果管理：RendererFeature 全局开关 + VolumeComponent 分级控制</li>
+<li>渲染调试：集成 CVar 控制台</li>
+<li>构建：Shader Prefiltering + Variant Stripper 双工具剔除变体</li>
+</ul>
+<hr />
+<h2 id="_3">三、关键实现细节</h2>
+<h3 id="_4">阴影</h3>
+<ul>
+<li>使用 <strong>PerObjectShadow</strong> 解决角色高精度阴影需求</li>
+<li><strong>PCSS</strong> 软阴影提升阴影质感，PenumbraMask + ScreenSpaceShadow 控制开销</li>
+<li>使用 <strong>Shadow Receiver Fragment Based Bias</strong> 替代 URP 的 Vertex Based Bias，解决特定角度阴影瑕疵；但代价是 IllusionRP Shader 无法与其他 URP Shader 混用，需手动适配</li>
+</ul>
+<h3 id="_5">屏幕空间光照</h3>
+<ul>
+<li>独立 ForwardGBufferPass 收集 GBuffer（非侵入式）</li>
+<li>历史帧管理用 <code>BufferedRTHandleSystem</code>，需处理 DynamicResolution RTSize 不匹配问题</li>
+<li><strong>AsyncCompute 优化</strong>：Compute Queue 算 SSR/GTAO，Graphics Queue 算阴影图；需注意 URP 14.0.12 的 Clear 顺序 Bug</li>
+<li>半分辨率：HDRP 做法（Compute In Half Res + Upsampling）优于 URP 原生 SSAO</li>
+</ul>
+<h3 id="_6">全局光照</h3>
+<ul>
+<li><strong>PRTGI + SSGI 组合</strong>：SSGI 提供实时 GI，PRTGI 作为屏幕外 fallback</li>
+<li>SSGI 未命中像素 fallback 到 AmbientProbe + ReflectionProbes</li>
+<li>PRTGI 提供 Adjustment Volume 编辑工具</li>
+</ul>
+<h3 id="_7">后处理</h3>
+<ul>
+<li>暴露 ACES 参数（UE 风格）和 GT 风格 Tonemapping</li>
+<li>日式写实风格下 GT 效果优于 ACES</li>
+</ul>
+<h3 id="_8">构建</h3>
+<ul>
+<li>Shader Prefiltering 粗筛：注意 <code>[RemoveIf]</code>/<code>[SelectIf]</code> 不作用于静态字段，需用 serialized 字段</li>
+<li>Variant Stripper 精筛：透明材质剔除屏幕空间效果变体</li>
+</ul>
+<hr />
+<h2 id="_9">四、可复用经验</h2>
+<ul>
+<li>提升角色渲染质量性价比最高的 3 个功能：<strong>PerObjectShadow + GTAO + SSSS</strong></li>
+<li>URP 上做非侵入式渲染管线改造的最佳实践：<strong>基于 RendererFeature 搭建，不修改 URP 源码</strong></li>
+<li>移动端渲染管线的前向路径选择：Forward / Forward+ 比 Deferred 更灵活</li>
+<li>自定义 ShadingModel 时注意 URP 的 Lambert 未除 PI，需用 NoPI 版本保证能量守恒</li>
+</ul>
+<hr />
+<h2 id="_10">附：方案审校</h2>
+<h3 id="_11">架构设计</h3>
+<p><strong>✅ 正确。</strong> 基于 URP RendererFeature 做加法而非重写 SRP，是商用项目最务实的路径。HDRP 功能过多不适合移动端、URP 插件碎片化整合成本高、自写 SRP 维护成本高——三个判断均准确。功能合并到单一 RendererFeature 统一调度，避免了多插件间的 Pass 重复浪费。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- 单 RendererFeature 管理 15+ 个 Pass 可能导致<strong>单帧 RendererFeature 执行时间过长</strong>，必要时可拆分为多个 Feature 按平台/场景分级加载
+- Forward Path 下屏幕空间光照（SSR/SSGI/GTAO）的 <strong>GBuffer 重建成本</strong>不可忽视，ForwardGBufferPass 相当于渲染了额外一张深度法线，在低端机上可能抵消收益
+- 未提及 <strong>URP 6.3 合并计划</strong>对管线的影响——如果 Unity 官方合并 URP 和 HDRP，自研管线的维护策略需要提前规划</p>
+<h3 id="shader">Shader 实现</h3>
+<p><strong>✅ 正确。</strong> 皮肤 SSSS + 双镜叶高光、头发 KajiyaKay/Marschner + 背面体积散射、布料各向异性 + Sheen 散射——都是移动端角色渲染的成熟方案。URP Lambert 未除 PI 导致需要 NoPI 版本的判断准确。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- SSSS 的 多 Profile 机制在 HDRP 中依赖 GPU 带宽，移动端如果一次 Profile 过多可能<strong>超过带宽预算</strong>，需按材质分级使用
+- 头发 OIT（顺序无关透明）在移动端开销较高，<strong>建议只在近景/过场特写时启用</strong>，游戏场景中降级为传统排序透明
+- FP16 overflow 的 clamp 保护（<code>clamp(SheenTerm, 0.0, 100.0)</code>）是移动端适配的常见做法，但需注意性能无感知</p>
+<h3 id="_12">阴影与全局光照</h3>
+<p><strong>✅ 正确。</strong> PCSS 软阴影 + PerObjectShadow 是角色高精度阴影的成熟方案。PRTGI + SSGI 的双层 GI 组合（实时 + 预计算 fallback）设计合理。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- Fragment Based Shadow Bias 的兼容性代价（无法与其他 URP Shader 混用）在<strong>第三方插件集成</strong>时可能成为严重阻碍，需评估项目对 AssetStore Shader 的依赖程度
+- PRTGI 的 Adjustment Volume 编辑工具虽然方便，但<strong>预计算 Probe 的烘焙时间</strong>在大型场景中可能很长，需在 workflow 中考虑</p>
+<h3 id="_13">构建与变体管理</h3>
+<p><strong>✅ 正确。</strong> Shader Prefiltering 粗筛 + Variant Stripper 精筛的双层变体管理策略是标准做法。<code>[RemoveIf]</code> 不作用于静态字段的坑点判断准确。</p>
+<p><strong>⚠️ 补充风险点：</strong>
+- 自定义 Shader Stripper 的<strong>维护成本</strong>随引擎升级而增加——每次 URP 版本更新都可能引入新的 keyword 或改变现有 keyword 语义，导致 Stripper 逻辑错误
+- 15 项功能的 Shader 变体组合数量可能<strong>急剧膨胀</strong>，建议在构建流程中增加变体数量告警机制</p>
+<h3 id="_14">综合结论</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">维度</th>
+<th style="text-align: left;">评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">技术深度</td>
+<td style="text-align: left;">优秀，完整覆盖了从着色器、阴影、屏幕空间光照到 GI、后处理、工作流的全链路</td>
+</tr>
+<tr>
+<td style="text-align: left;">正确性</td>
+<td style="text-align: left;">无原理性错误，工程决策务实</td>
+</tr>
+<tr>
+<td style="text-align: left;">可落地性</td>
+<td style="text-align: left;">中等偏高——功能丰富但复杂度也高，适合有一定图形学基础的团队</td>
+</tr>
+<tr>
+<td style="text-align: left;">风险披露</td>
+<td style="text-align: left;">诚实，解释了 Fragment Bias 的兼容性代价、URP 14.0.12 的 Bug 等风险</td>
+</tr>
+<tr>
+<td style="text-align: left;">数据可信度</td>
+<td style="text-align: left;">未提供具体性能数据对比，但架构设计本身合理</td>
+</tr>
+</tbody>
+</table>
+<p><strong>没有发现原理性错误。</strong> 主要提醒：ForwardGBufferPass 的带宽成本、头发 OIT 的分级使用、第三方 Shader 兼容性、变体数量膨胀监控。</p>
+<hr />
+<blockquote>
+<p>原文来源：<a href="https://blog.uwa4d.com/archives/Usparkle_IllusionRP.html">UWA 博客</a> | USparkle 专栏</p>
+</blockquote>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+
+  })();
+</script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+<script data-goatcounter="https://gdc.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

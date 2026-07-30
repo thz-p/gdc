@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>解决URP角色渲染短板，自研IllusionRP管线落地移动端</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&family=Noto+Serif+SC:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg-primary: oklch(4.5% .004 60);
+    --bg-secondary: oklch(10% .005 60);
+    --bg-card: oklch(6% .003 60);
+    --text-primary: oklch(92% .004 70);
+    --text-secondary: oklch(65% .008 70);
+    --accent: oklch(74% .135 68);
+    --accent-dim: oklch(58% .115 58);
+    --border: oklch(18% .006 60);
+    --border-light: oklch(22% .008 60);
+    --code-bg: oklch(9% .005 60);
+    --pre-bg: oklch(3% .003 60);
+    --quote-bg: oklch(12% .006 60);
+    --quote-border: oklch(74% .135 68 / 0.55);
+    --toc-width: 220px;
+    --theme-icon: "\2600\FE0F";
+  }
+
+  /* ===== Light Theme ===== */
+  .theme-light {
+    --bg-primary: oklch(96% 0.008 85);
+    --bg-secondary: oklch(93% 0.01 85);
+    --bg-card: oklch(91% 0.012 85);
+    --text-primary: oklch(25% 0.015 60);
+    --text-secondary: oklch(42% 0.01 60);
+    --accent: oklch(50% 0.14 60);
+    --accent-dim: oklch(42% 0.12 58);
+    --border: oklch(82% 0.01 80);
+    --border-light: oklch(78% 0.01 80);
+    --code-bg: oklch(90% 0.008 85);
+    --pre-bg: oklch(94% 0.01 85);
+    --quote-bg: oklch(90% 0.012 85);
+    --quote-border: oklch(50% 0.14 60 / 0.5);
+    --theme-icon: "\1F319";
+  }
+  .theme-light .codehilite .c  { color: #8a8a8a; }
+  .theme-light .codehilite .k  { color: #7c3aed; }
+  .theme-light .codehilite .kc { color: #7c3aed; }
+  .theme-light .codehilite .kd { color: #7c3aed; }
+  .theme-light .codehilite .kn { color: #dc2626; }
+  .theme-light .codehilite .kp { color: #7c3aed; }
+  .theme-light .codehilite .kr { color: #7c3aed; }
+  .theme-light .codehilite .kt { color: #7c3aed; }
+  .theme-light .codehilite .s  { color: #16a34a; }
+  .theme-light .codehilite .sa { color: #16a34a; }
+  .theme-light .codehilite .sb { color: #16a34a; }
+  .theme-light .codehilite .sc { color: #16a34a; }
+  .theme-light .codehilite .dl { color: #16a34a; }
+  .theme-light .codehilite .s2 { color: #16a34a; }
+  .theme-light .codehilite .se { color: #16a34a; }
+  .theme-light .codehilite .sh { color: #16a34a; }
+  .theme-light .codehilite .si { color: #16a34a; }
+  .theme-light .codehilite .sx { color: #16a34a; }
+  .theme-light .codehilite .sr { color: #16a34a; }
+  .theme-light .codehilite .s1 { color: #16a34a; }
+  .theme-light .codehilite .ss { color: #16a34a; }
+  .theme-light .codehilite .n  { color: #1e293b; }
+  .theme-light .codehilite .na { color: #2563eb; }
+  .theme-light .codehilite .nb { color: #2563eb; }
+  .theme-light .codehilite .nc { color: #d97706; }
+  .theme-light .codehilite .no { color: #d97706; }
+  .theme-light .codehilite .nd { color: #0891b2; }
+  .theme-light .codehilite .ni { color: #0891b2; }
+  .theme-light .codehilite .ne { color: #dc2626; }
+  .theme-light .codehilite .nf { color: #2563eb; }
+  .theme-light .codehilite .nl { color: #dc2626; }
+  .theme-light .codehilite .nn { color: #d97706; }
+  .theme-light .codehilite .nx { color: #1e293b; }
+  .theme-light .codehilite .py { color: #dc2626; }
+  .theme-light .codehilite .nt { color: #dc2626; }
+  .theme-light .codehilite .nv { color: #1e293b; }
+  .theme-light .codehilite .ow { color: #2563eb; }
+  .theme-light .codehilite .w  { color: #8a8a8a; }
+  .theme-light .codehilite .mf { color: #d97706; }
+  .theme-light .codehilite .mh { color: #d97706; }
+  .theme-light .codehilite .mi { color: #d97706; }
+  .theme-light .codehilite .mo { color: #d97706; }
+  .theme-light .codehilite .p  { color: #334155; }
+  .theme-light .codehilite .o  { color: #2563eb; }
+  .theme-light .codehilite .gp { color: #8a8a8a; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Serif SC", "SimSun", "Songti SC", serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.9;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== Progress Bar ===== */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    width: 0%;
+    height: 2px;
+    background: var(--accent);
+    z-index: 1000;
+    transition: width 0.1s linear;
+  }
+
+  /* ===== Back to Top ===== */
+  #back-to-top {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.3s, transform 0.3s, background 0.2s;
+    z-index: 999;
+  }
+  #back-to-top.visible { opacity: 1; transform: translateY(0); }
+  #back-to-top:hover { background: var(--bg-card-hover); color: var(--accent); border-color: var(--accent-dim); }
+
+  /* ===== TOC ===== */
+  .toc-wrap {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--toc-width);
+    height: 100vh;
+    padding: 64px 0 32px 24px;
+    overflow-y: auto;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.5s;
+  }
+  .toc-wrap.loaded { opacity: 1; }
+  .toc-wrap::-webkit-scrollbar { width: 3px; }
+  .toc-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .toc-label {
+    font-family: "Inter", "JetBrains Mono", sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .toc-wrap a {
+    display: block;
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 3px 0;
+    border-left: 1px solid var(--border);
+    padding-left: 12px;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .toc-wrap a.toc-h3 { padding-left: 24px; font-size: 11.5px; }
+  .toc-wrap a:hover { color: var(--accent); }
+  .toc-wrap a.active { color: var(--accent); border-left-color: var(--accent); }
+
+  /* ===== Layout ===== */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ===== Header ===== */
+  .article-header { margin-bottom: 48px; }
+
+  .article-header h1 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    margin: 0 0 16px 0;
+    color: var(--text-primary);
+  }
+
+  .article-meta {
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .article-meta a { color: var(--accent); text-decoration: none; }
+  .article-meta .sep { color: var(--border-light); }
+
+  .read-time {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    margin-top: 12px;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .tag {
+    display: inline-block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 10px;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Article Content ===== */
+  .article { color: var(--text-primary); }
+
+  .article h2 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    margin: 44px 0 14px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .article h3 {
+    font-family: "Inter", "Noto Sans SC", sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 28px 0 10px 0;
+    color: var(--text-primary);
+  }
+
+  .article p {
+    margin: 0 0 18px 0;
+    line-height: 1.9;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  .article a {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .article a:hover { color: var(--accent-dim); text-decoration: underline; }
+
+  .article strong { font-weight: 700; color: var(--text-primary); }
+
+  .article blockquote {
+    margin: 22px 0;
+    padding: 14px 20px;
+    background: var(--quote-bg);
+    border-left: 3px solid var(--quote-border);
+    border-radius: 0 6px 6px 0;
+    position: relative;
+  }
+  .article blockquote::before { content: none; }
+  .article blockquote p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .article blockquote h3 { margin: 0 0 6px 0; font-size: 14px; color: var(--accent); }
+
+  .article code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 0.82em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .article pre {
+    position: relative;
+    background: var(--pre-bg);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 18px 0;
+  }
+
+  .article pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+    color: var(--text-primary);
+  }
+
+  /* ===== Copy Button ===== */
+  .copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s, background 0.2s;
+    font-size: 12px;
+  }
+  .article pre:hover .copy-btn { opacity: 1; }
+  .copy-btn:hover { background: var(--bg-card-hover); color: var(--accent); }
+  .copy-btn.copied { color: #a6e3a1; border-color: #a6e3a1; }
+
+  .article img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: zoom-in;
+    transition: opacity 0.3s;
+  }
+  .article img:hover { opacity: 0.85; }
+
+  .article ul, .article ol { margin: 14px 0; padding-left: 22px; }
+  .article li { margin: 5px 0; line-height: 1.7; font-size: 15px; }
+
+  .article hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 36px 0;
+  }
+
+  /* ===== Lightbox ===== */
+  .lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+  .lightbox-overlay img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 28px;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    background: none;
+    border: none;
+    font-family: "Inter", sans-serif;
+  }
+  .lightbox-close:hover { opacity: 1; }
+
+  /* ===== Code Syntax Highligh (Catppuccin Mocha) ===== */
+  .codehilite { background: transparent; }
+  .codehilite .c  { color: #6c7086; font-style: italic; }
+  .codehilite .k  { color: #cba6f7; }
+  .codehilite .kc { color: #cba6f7; }
+  .codehilite .kd { color: #cba6f7; }
+  .codehilite .kn { color: #f38ba8; }
+  .codehilite .kp { color: #cba6f7; }
+  .codehilite .kr { color: #cba6f7; }
+  .codehilite .kt { color: #cba6f7; }
+  .codehilite .s  { color: #a6e3a1; }
+  .codehilite .sa { color: #a6e3a1; }
+  .codehilite .sb { color: #a6e3a1; }
+  .codehilite .sc { color: #a6e3a1; }
+  .codehilite .dl { color: #a6e3a1; }
+  .codehilite .s2 { color: #a6e3a1; }
+  .codehilite .se { color: #a6e3a1; }
+  .codehilite .sh { color: #a6e3a1; }
+  .codehilite .si { color: #a6e3a1; }
+  .codehilite .sx { color: #a6e3a1; }
+  .codehilite .sr { color: #a6e3a1; }
+  .codehilite .s1 { color: #a6e3a1; }
+  .codehilite .ss { color: #a6e3a1; }
+  .codehilite .n  { color: #cdd6f4; }
+  .codehilite .na { color: #89b4fa; }
+  .codehilite .nb { color: #89b4fa; }
+  .codehilite .nc { color: #fab387; }
+  .codehilite .no { color: #fab387; }
+  .codehilite .nd { color: #89dceb; }
+  .codehilite .ni { color: #89dceb; }
+  .codehilite .ne { color: #f38ba8; }
+  .codehilite .nf { color: #89b4fa; }
+  .codehilite .nl { color: #f38ba8; }
+  .codehilite .nn { color: #fab387; }
+  .codehilite .nx { color: #cdd6f4; }
+  .codehilite .py { color: #f38ba8; }
+  .codehilite .nt { color: #f38ba8; }
+  .codehilite .nv { color: #cdd6f4; }
+  .codehilite .ow { color: #f38ba8; }
+  .codehilite .w  { color: #6c7086; }
+  .codehilite .mf { color: #fab387; }
+  .codehilite .mh { color: #fab387; }
+  .codehilite .mi { color: #fab387; }
+  .codehilite .mo { color: #fab387; }
+  .codehilite .p  { color: #bac2de; }
+  .codehilite .o  { color: #89b4fa; }
+  .codehilite .gp { color: #6c7086; }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 960px) {
+    .toc-wrap { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 20px 16px 64px; }
+    .article-header h1 { font-size: 22px; }
+    .article h2 { font-size: 17px; }
+    .article h3 { font-size: 15px; }
+    body { font-size: 14px; }
+    .article p { font-size: 14px; }
+    .article li { font-size: 14px; }
+    .article pre { padding: 14px; font-size: 12px; }
+    #back-to-top { bottom: 20px; right: 20px; width: 36px; height: 36px; }
+  }
+
+  /* ===== Theme Toggle ===== */
+  #themeToggle {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    font-size: 18px;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    user-select: none;
+  }
+  #themeToggle:hover {
+    background: var(--bg-card);
+    border-color: var(--accent-dim);
+    transform: scale(1.05);
+  }
+  #themeToggle:active {
+    transform: scale(0.95);
+  }
+
+  @media (max-width: 640px) {
+    #themeToggle {
+      top: 12px;
+      right: 12px;
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+
+<div class="toc-wrap" id="toc">
+  <div class="toc-label">目录</div>
+  <a class="" href="#_1">现有方案</a>
+<a class="" href="#_2">最终选型</a>
+<a class="" href="#_3">主要拓展</a>
+<a class="" href="#_4">着色器实现细节</a>
+<a class="toc-h3" href="#_5">皮肤材质</a>
+<a class="toc-h3" href="#_6">头发材质</a>
+<a class="toc-h3" href="#_7">布料材质</a>
+<a class="" href="#_8">阴影质量提升细节</a>
+<a class="" href="#_9">屏幕空间光照实现细节</a>
+<a class="" href="#_10">全局光照方案细节</a>
+<a class="" href="#_11">后处理提升细节</a>
+<a class="" href="#_12">工作流细节</a>
+<a class="" href="#_13">参考</a>
+</div>
+
+<div class="container">
+  <article>
+    <div class="article-header">
+      <div class="article-meta">
+        <a href="https://blog.uwa4d.com/archives/Usparkle_IllusionRP.html">UWA 博客</a>
+        <span class="sep">/</span>
+        <span>厚积薄发</span>
+        <span class="sep">·</span>
+        <span>AkiKurisu</span>
+      </div>
+      <h1>解决URP角色渲染短板，自研IllusionRP管线落地移动端</h1>
+      <div class="read-time">约 46 分钟 · 本页访问 <span id="busuanzi_value_page_pv"></span></div>
+      <div class="tags">
+        <span class="tag">Unity</span>
+<span class="tag">URP</span>
+<span class="tag">渲染管线</span>
+<span class="tag">Shader</span>
+<span class="tag">移动端</span>
+<span class="tag">角色渲染</span>
+<span class="tag">IllusionRP</span>
+      </div>
+    </div>
+
+    <div class="article" id="article-content">
+      <p>随着移动端芯片（如高通骁龙Elite）性能的飞跃，移动端芯片性能大幅提升，光线追踪等高规格渲染技术已能够落地移动端。然而，作为Unity移动端开发首选的URP（Universal Render Pipeline），其原生Feature在应对高质量角色渲染需求时显得捉襟见肘。</p>
+<p>为了在移动端实现高品质的角色渲染，笔者历时一年开发了IllusionRP。插件除了提升角色渲染质量，还吸收了大量来自HDRP和开源社区的渲染功能。</p>
+<p>IllusionRP完全基于URP的RendererFeature开发，无缝衔接现有URP项目，目前适用于Unity 2022.3.62和URP 14.0.12，理论上也支持基于22版本的团结引擎（没测试过），仓库链接放在了文章末尾，欢迎在GitHub收藏关注。</p>
+<p>本篇文章就开发IllusionRP的设计思路以及工程实现方面进行经验分享。</p>
+<p><img alt="IllusionRP 渲染效果" src="0005-illusionrp_files/1.png" /></p>
+<h2 id="_1">现有方案</h2>
+<p>作为Unity开发者，想要提升画面表现力，通常有以下几种路径：</p>
+<ol>
+<li><strong>直接用HDRP</strong>。Feature很多，但由于大部分使用ComputeShader，只适用于主机和高端PC。由于HDRP主要面向高端PC和主机平台，在移动端商业项目中的应用相对较少。但现在移动端性能逐渐变强的情况下，也存在有优化能力的团队将HDRP适配到移动端，例如搜狐畅游引擎部的<a href="https://zhuanlan.zhihu.com/p/567981404">《图形引擎实战：HDRP移动版高清渲染管线改造》</a>。</li>
+<li><strong>URP加插件</strong>。URP可以直接通过RendererFeature注入ScriptableRenderPass方便拓展功能，AssetStore和Github都能找到非常多的插件。</li>
+<li><strong>自己写SRP</strong>，例如蛋白胨大佬的<a href="https://github.com/danbaidong1111/DanbaidongRP">DanbaidongRP</a>，前提是有比较强的图形学知识和工程能力。</li>
+</ol>
+<p>第一种对于普通开发者来说不太可能，等搞完都出Unity 7了（Unity之前说会在Unity 7整合URP和HDRP，但在发此文的时候Unity把合并计划挪到了6.3，现在可以坐等了）。</p>
+<p>第二种有好有坏，将渲染功能拆分成RenderFeature让社区开发者可以协作是一件好事，但也会导致冗余浪费和隐藏成本的提高。例如A插件实现了一个SSR，在Forward渲染路径下增加一个ThinGBufferPass，而B插件实现了一个SSGI，也在Forward渲染路径下增加了类似的Pass，那么很自然会看到这里要渲染两次实则功能一样的ThinGBuffer。再譬如对于需要修改Shader的效果，插件一般都会单独提供一个Shader，而要使用多个插件的效果就需要开发者手动整合。因此在接入各类插件后，整体优化和整合的问题还是落在了开发者头上，改完了还不方便更新。</p>
+<p>第三种对民科菜鸟来说属实太难了……客观来讲，自定义的SRP难以随引擎升级以适配新功能（例如Unity 6的GPU Driven），维护成本比较高。</p>
+<h2 id="_2">最终选型</h2>
+<p>由于笔者认为自己的工程能力尚可，不想直接摆烂，结合自己对SRP的理解攒出了第四个方案——在URP基础上再搭一层管线，将HDRP迁移过来的渲染功能合并在一个RendererFeature中以便管线调度RendererPass。</p>
+<p>因为没有重写渲染管线，基本都是加法，这让笔者能在一边迁移功能的同时学习相关概念和算法。</p>
+<p>渲染路径的选择上，使用Deferred的话需要修改LightLoop源码比较麻烦，最后选择只兼容Forward和Forward+渲染路径，添加Shader和Pass比较灵活。</p>
+<h2 id="_3">主要拓展</h2>
+<p>大概可以分为<strong>Shading-着色器</strong>、<strong>Rendering-渲染管线</strong>以及<strong>Workflow-工作流</strong>三大部分。</p>
+<p><strong>Shading</strong></p>
+<p>着色器的拓展主要依赖于添加新的ShadingModel，URP只有一个Lit，对于复杂的材质是完全不够的。</p>
+<p>IllusionRP添加了以下ShadingModel：
+1. Skin 皮肤
+2. Hair 头发
+3. Fabric 布料</p>
+<p><strong>Rendering</strong></p>
+<p>光添加ShadingModel对于提高渲染质量是不够的，例如URP的SSAO对于角色渲染就是非常糟糕，至少也得调整为HBAO才能看。</p>
+<p>IllusionRP集成了以下渲染功能：
+1. Per-Object Shadow 逐物体阴影
+2. Percentage Closer Soft Shadows（PCSS）高质量的软阴影
+3. Contact Shadows 接触阴影
+4. Ground Truth Ambient Occlusion（GTAO）高质量的屏幕空间环境光遮蔽
+5. Screen-Space Reflection（SSR）屏幕空间反射
+6. Screen Space Subsurface Scattering（SSSS）屏幕空间次表面散射
+7. Screen Space Global Illumination（SSGI）屏幕空间全局光照
+8. Precomputed Radiance Transfer Global Illumination（PRTGI）预计算辐照度全局光照
+9. Reflection Normalization 反射标准化
+10. Order-Independent transparency（OIT）顺序无关半透明
+11. Volumetric Fog 体积雾
+12. Convolution Bloom 卷积泛光（替换原生Bloom）
+13. Auto Exposure 自适应曝光
+14. Gran Turismo风格Tonemapping（替换原生Tonemapping-Neutral）
+15. Unreal的Filmic ACES Tonemapping（替换原生Tonemapping-ACES）</p>
+<p>其中PerObjectShadow、GTAO和SSSS对于提升角色渲染质量影响最大，如果读者也想要提高角色渲染质量，可以尝试只添加这3个功能。</p>
+<p>功能细分：
+- 1~3是阴影渲染提升
+- 4~7是屏幕空间光照提升
+- 7~9是全局光照提升
+- 10是半透明渲染提升
+- 11~15是后处理提升</p>
+<p><strong>Workflow</strong></p>
+<p>工作流这部分可以分为着色器开发流程、效果管理流程、渲染调试流程与构建流程。</p>
+<ol>
+<li>着色器开发：提供ASE（Amplify Shader Editor）模板，分离设计层与模型层</li>
+<li>效果管理：通过RendererFeature全局开关与VolumeComponent进行分级控制</li>
+<li>渲染调试：集成CVar</li>
+<li>构建：定制Shader Stripper，剔除无用变体</li>
+</ol>
+<h2 id="_4">着色器实现细节</h2>
+<h3 id="_5">皮肤材质</h3>
+<p>皮肤核心是次表面散射，笔者起初尝试了Matt大神提供的球面高斯次表面散射（SGSSS），用公式拟合替代了过去移动端经常使用的预计算次表面散射技术中的LUT，在Forward渲染路径下为着色器节省了宝贵的一个Sampler。但因为没有屏幕空间的模糊，效果我感觉还是不够好，一种方式是再使用一个模糊过的法线，但这样就又把省下的Sampler还了回去。</p>
+<p>之后还是完全使用了屏幕空间次表面散射（SSSS），并且还原了HDRP的多Profile方式以支持多种次表面散射材质。</p>
+<p><img alt="皮肤 SSSS 效果" src="0005-illusionrp_files/2.png" /></p>
+<p>剩下的就是皮肤比较特殊的双镜叶高光来模拟皮肤的油脂层。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Primary Lobe</span>
+<span class="kt">half3</span><span class="w"> </span><span class="n">SpecularLobe1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SkinGGXSpecularLobe</span><span class="p">(</span><span class="n">brdfData</span><span class="p">,</span><span class="w"> </span><span class="n">normalWS</span><span class="p">,</span><span class="w"> </span><span class="n">lightDirectionWS</span><span class="p">,</span><span class="w"> </span><span class="n">viewDirectionWS</span><span class="p">);</span>
+
+<span class="c1">// Secondary Lobe</span>
+<span class="n">BRDFData</span><span class="w"> </span><span class="n">brdfData2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">brdfData</span><span class="p">;</span>
+<span class="n">brdfData2</span><span class="p">.</span><span class="n">roughness</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">max</span><span class="p">(</span><span class="n">PerceptualRoughnessToRoughness</span><span class="p">(</span><span class="n">SkinData</span><span class="p">.</span><span class="n">PerceptualRoughness</span><span class="p">),</span><span class="w"> </span><span class="n">HALF_MIN_SQRT</span><span class="p">);</span>
+<span class="kt">half3</span><span class="w"> </span><span class="n">SpecularLobe2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SkinGGXSpecularLobe</span><span class="p">(</span><span class="n">brdfData2</span><span class="p">,</span><span class="w"> </span><span class="n">normalWS</span><span class="p">,</span><span class="w"> </span><span class="n">lightDirectionWS</span><span class="p">,</span><span class="w"> </span><span class="n">viewDirectionWS</span><span class="p">);</span>
+
+<span class="c1">// Dual Lobe Mix</span>
+<span class="kt">half3</span><span class="w"> </span><span class="n">SpecularLobeTerm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">lerp</span><span class="p">(</span><span class="n">SpecularLobe1</span><span class="p">,</span><span class="w"> </span><span class="n">SpecularLobe2</span><span class="p">,</span><span class="w"> </span><span class="n">SkinData</span><span class="p">.</span><span class="n">LobeWeight</span><span class="p">);</span>
+</code></pre></div>
+
+<h3 id="_6">头发材质</h3>
+<p>Kajiya-Kay模型目前都是使用双层高光的变体版本，可以参考HDRP接入。</p>
+<p>Marschner模型则直接使用了UE5中的版本。</p>
+<p><img alt="头发材质效果" src="0005-illusionrp_files/3.png" /></p>
+<p>额外参考神秘海域4中分享的Volumetric-based方式，增加了一个背面体积散射，搭配体积光有不错的视觉效果。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Reference: [The Process of Creating Volumetric-based Materials in Uncharted 4]</span>
+<span class="kt">half3</span><span class="w"> </span><span class="n">HairVolumetricBacklitScatter</span><span class="p">(</span><span class="kt">half3</span><span class="w"> </span><span class="n">albedo</span><span class="p">,</span><span class="w"> </span><span class="kt">half3</span><span class="w"> </span><span class="n">L</span><span class="p">,</span><span class="w"> </span><span class="kt">half3</span><span class="w"> </span><span class="n">V</span><span class="p">,</span><span class="w"> </span><span class="kt">half3</span><span class="w"> </span><span class="n">N</span><span class="p">,</span><span class="w"> </span><span class="n">HairData</span><span class="w"> </span><span class="n">hairData</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">ScatterPower</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">9</span><span class="p">;</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">lightScale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kt">half3</span><span class="w"> </span><span class="n">NoisedL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">normalize</span><span class="p">(</span><span class="n">L</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">hairData</span><span class="p">.</span><span class="n">Noise</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">0.25</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">NdotL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">dot</span><span class="p">(</span><span class="n">N</span><span class="p">,</span><span class="w"> </span><span class="n">NoisedL</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">NdotV</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">dot</span><span class="p">(</span><span class="n">N</span><span class="p">,</span><span class="w"> </span><span class="n">V</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">VdotL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">dot</span><span class="p">(</span><span class="n">V</span><span class="p">,</span><span class="w"> </span><span class="n">NoisedL</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">CosThetaL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">saturate</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">NdotL</span><span class="p">));</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">CosThetaV</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">saturate</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">NdotV</span><span class="p">));</span>
+
+<span class="w">    </span><span class="kt">half3</span><span class="w"> </span><span class="n">scatterFresnel</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">pow</span><span class="p">(</span><span class="mf">1.0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">CosThetaV</span><span class="p">,</span><span class="w"> </span><span class="n">ScatterPower</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">half3</span><span class="w"> </span><span class="n">scatterLight</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">pow</span><span class="p">(</span><span class="nb">saturate</span><span class="p">(</span><span class="o">-</span><span class="n">VdotL</span><span class="p">),</span><span class="w"> </span><span class="n">ScatterPower</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span>
+<span class="w">                        </span><span class="p">(</span><span class="mf">1.0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">CosThetaV</span><span class="p">)</span><span class="w"> </span><span class="o">*</span>
+<span class="w">                        </span><span class="nb">saturate</span><span class="p">(</span><span class="mf">1.0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">CosThetaL</span><span class="p">);</span>
+
+<span class="w">    </span><span class="kt">half3</span><span class="w"> </span><span class="n">transAmount</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">scatterFresnel</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">lightScale</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scatterLight</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">lerp</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">albedo</span><span class="p">,</span><span class="w"> </span><span class="mf">0.8</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">hairData</span><span class="p">.</span><span class="n">Tint</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">transAmount</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">hairData</span><span class="p">.</span><span class="n">Backlit</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>剩下就是为了让头发边缘没有锯齿或噪点，使用顺序无关的透明渲染方式。详细可见<a href="https://zhuanlan.zhihu.com/p/1907549925065070387">《如何在Unity URP中让头发渲染更丝滑》</a>。</p>
+<h3 id="_7">布料材质</h3>
+<p>布料主要就两部分：
+- Anisotropic Specular（各向异性高光）</p>
+<p><img alt="布料各向异性高光" src="0005-illusionrp_files/4.png" /></p>
+<ul>
+<li>Ashikhmin和Charlie两种Sheen Scattering模型。</li>
+</ul>
+<p>需要注意在URP下因为设计原因，Lambert漫反射都没有除PI，为了保证能量守恒，对于自定义的ShadingModel，需要使用NoPI版本即未除PI的版本。</p>
+<div class="codehilite"><pre><span></span><code><span class="kt">void</span><span class="w"> </span><span class="n">SheenScattering</span><span class="p">(</span><span class="n">BRDFData</span><span class="w"> </span><span class="n">brdfData</span><span class="p">,</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">NoH</span><span class="p">,</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">NoV</span><span class="p">,</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">NoL</span><span class="p">,</span><span class="w"> </span><span class="k">out</span><span class="w"> </span><span class="kt">half</span><span class="w"> </span><span class="n">SheenTerm</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="c1">// @IllusionRP:</span>
+<span class="w">    </span><span class="c1">// Since URP does not multiply INV_PI in Lambert Diffuse for artistic design considerations.</span>
+<span class="w">    </span><span class="c1">// Specular term need multiply PI to maintain energy conservation.</span>
+<span class="cp">#ifdef _SHEEN_VELET</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">D_Sheen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">D_AshikhminNoPI</span><span class="p">(</span><span class="n">NoH</span><span class="p">,</span><span class="w"> </span><span class="n">brdfData</span><span class="p">.</span><span class="n">roughness2</span><span class="p">);</span>
+<span class="cp">#else</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">D_Sheen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">D_CharlieNoPI</span><span class="p">(</span><span class="n">NoH</span><span class="p">,</span><span class="w"> </span><span class="n">brdfData</span><span class="p">.</span><span class="n">roughness</span><span class="p">);</span>
+<span class="cp">#endif</span>
+
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">V_Sheen</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">V_Neubelt</span><span class="p">(</span><span class="n">NoL</span><span class="p">,</span><span class="w"> </span><span class="n">NoV</span><span class="p">);</span>
+<span class="w">    </span><span class="n">SheenTerm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">D_Sheen</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">V_Sheen</span><span class="p">;</span>
+<span class="cp">#if REAL_IS_HALF</span>
+<span class="w">    </span><span class="n">SheenTerm</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">SheenTerm</span><span class="w">  </span><span class="o">-</span><span class="w"> </span><span class="n">HALF_MIN</span><span class="p">;</span>
+<span class="w">    </span><span class="n">SheenTerm</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nb">clamp</span><span class="p">(</span><span class="n">SheenTerm</span><span class="w"> </span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="mf">100.0</span><span class="p">);</span><span class="w"> </span><span class="c1">// Prevent FP16 overflow on mobiles</span>
+<span class="cp">#endif</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>然后因为前面适配了多Profile的次表面散射，理论上可以根据需要加入布料的次表面散射。</p>
+<h2 id="_8">阴影质量提升细节</h2>
+<p>由于CSM的阴影精度并不高，对于需要高精度阴影的角色，除了增加CSM等级的方式，更普遍的做法是使用逐物体阴影PerObjectShadow。</p>
+<p>这里使用了Stalo大佬星穹铁道复刻项目<a href="https://github.com/stalomeow/StarRailNPRShader">stalomeow/StarRailNPRShader</a>中的PerObjectShadow实现。</p>
+<p>其次参考HDRP和recaeee大佬的渲染项目<a href="https://github.com/recaeee/RecaNoMaho_P">recaeee/RecaNoMaho_P</a>，为主光源阴影和逐物体阴影适配了PCSS软阴影，越远越模糊的表现能提高阴影的质感，从实践上看在开启了PenumbraMask标记半影区域以及使用ScreenSpaceShadow后，PCSS的开销比较可控，移动端可以选择开启。</p>
+<p><img alt="PCSS 软阴影效果" src="0005-illusionrp_files/5.png" /></p>
+<p>另一方面，URP由于使用Shadow Caster Vertex Based Bias会在特定角度有很多瑕疵（参考<a href="https://zhuanlan.zhihu.com/p/370951892">《自适应Shadow Bias算法》</a>的分享），因此IllusionRP使用了Shadow Receiver Fragment Based Bias。</p>
+<p>但这也有一定弊端，即IllusionRP的Shader无法和其他URP Shader一起使用，例如要添加AssetStore的Shader，就需要逐个手动适配。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Ref: ApplyShadowBias</span>
+<span class="c1">// Should be used in fragment shader instead of vertex shader</span>
+<span class="kt">float3</span><span class="w"> </span><span class="n">IllusionApplyShadowBias</span><span class="p">(</span><span class="kt">float3</span><span class="w"> </span><span class="n">positionWS</span><span class="p">,</span><span class="w"> </span><span class="kt">float3</span><span class="w"> </span><span class="n">normalWS</span><span class="p">,</span><span class="w"> </span><span class="kt">float3</span><span class="w"> </span><span class="n">lightDirection</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="cp">#ifdef _MAIN_LIGHT_SHADOWS_CASCADE</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">cascadeIndex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ComputeCascadeIndex</span><span class="p">(</span><span class="n">positionWS</span><span class="p">);</span>
+<span class="cp">#else</span>
+<span class="w">    </span><span class="kt">half</span><span class="w"> </span><span class="n">cascadeIndex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">half</span><span class="p">(</span><span class="mf">0.0</span><span class="p">);</span>
+<span class="cp">#endif</span>
+
+<span class="w">    </span><span class="kt">float4</span><span class="w"> </span><span class="n">shadowBias</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">_MainLightShadowCascadeBiases</span><span class="p">[</span><span class="n">cascadeIndex</span><span class="p">];</span>
+
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">invNdotL</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1.0</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nb">saturate</span><span class="p">(</span><span class="nb">dot</span><span class="p">(</span><span class="n">lightDirection</span><span class="p">,</span><span class="w"> </span><span class="n">normalWS</span><span class="p">));</span>
+<span class="w">    </span><span class="kt">float</span><span class="w"> </span><span class="n">scale</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">invNdotL</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">shadowBias</span><span class="p">.</span><span class="n">y</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1">// In fragment shadow bias, bias direction is reversed</span>
+<span class="w">    </span><span class="n">positionWS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">-</span><span class="n">lightDirection</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">shadowBias</span><span class="p">.</span><span class="n">xxx</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">positionWS</span><span class="p">;</span>
+<span class="w">    </span><span class="n">positionWS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">normalWS</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="p">.</span><span class="n">xxx</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">positionWS</span><span class="p">;</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">positionWS</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">float3</span><span class="w"> </span><span class="n">biasPositionWS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">positionWS</span><span class="p">;</span>
+<span class="cp">#if APPLY_SHADOW_BIAS_FRAGMENT</span>
+<span class="w">    </span><span class="c1">// Recalculate shadowCoord when using shadow bias in fragment shader</span>
+<span class="w">    </span><span class="n">biasPositionWS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IllusionApplyShadowBias</span><span class="p">(</span><span class="n">positionWS</span><span class="p">,</span><span class="w"> </span><span class="n">normalWS</span><span class="p">,</span><span class="w"> </span><span class="n">lightDir</span><span class="p">);</span>
+<span class="w">    </span><span class="cp">#if !(defined(_MAIN_LIGHT_SHADOWS_SCREEN) &amp;&amp; (SURFACE_TYPE_RECEIVE_SCREEN_SPACE_SHADOWS))</span>
+<span class="w">        </span><span class="n">shadowCoord</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TransformWorldToShadowCoord</span><span class="p">(</span><span class="n">biasPositionWS</span><span class="p">);</span>
+<span class="w">    </span><span class="cp">#endif</span>
+<span class="cp">#endif</span>
+
+<span class="kt">half</span><span class="w"> </span><span class="n">realtimeShadow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IllusionMainLightRealtimeShadow</span><span class="p">(</span><span class="n">shadowCoord</span><span class="p">);</span>
+</code></pre></div>
+
+<h2 id="_9">屏幕空间光照实现细节</h2>
+<p>屏幕空间光照接入了SSAO（使用了GTAO算法）、SSGI、SSR。</p>
+<p>SSR在之前的文章<a href="https://zhuanlan.zhihu.com/p/1912828657585590857">《UPR Screen Space Reflection实践》</a>中提过，和HDRP不同的是IllusionRP额外包含了几个更轻量的不使用Hiz的方法。</p>
+<p><img alt="SSR 效果" src="0005-illusionrp_files/6.png" /></p>
+<p>对于前向渲染管线中实现屏幕空间光照的工程实践中，我认为有以下几个重点：</p>
+<p><strong>GBuffer获取</strong></p>
+<p>因为IllusionRP没有侵入式修改URP，所以是单独增加了一个ForwardGBufferPass来收集GBuffer数据，更好的方式是放在DepthNormalPass中MRT一起收集。</p>
+<p><strong>历史帧管理</strong></p>
+<p>SSR和SSGI都有时域混合降噪的需求，因此管线需要支持历史帧管理。</p>
+<p>SRP提供了BufferedRTHandleSystem专门用于管理历史帧RT资源的Swap。</p>
+<p>需要注意的是BufferedRTHandleSystem只会在RT尺寸超过缓冲区大小时重新创建RenderTexture，而如果是RT尺寸变小，则直接通过修改全局的HistoryRTHandleSize来调整采样和写入时的UV，减少运行时DynamicResolution伸缩RTSize带来的Allocation。</p>
+<p>URP下因为不开启DynamicResolution可以关掉这个功能，防止手机屏幕转动导致RTSize不匹配。</p>
+<div class="codehilite"><pre><span></span><code><span class="kt">var</span><span class="w"> </span><span class="n">descriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">renderingData</span><span class="p">.</span><span class="n">cameraData</span><span class="p">.</span><span class="n">cameraTargetDescriptor</span><span class="p">;</span>
+<span class="kt">var</span><span class="w"> </span><span class="n">viewportSize</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector2Int</span><span class="p">(</span><span class="n">descriptor</span><span class="p">.</span><span class="n">width</span><span class="p">,</span><span class="w"> </span><span class="n">descriptor</span><span class="p">.</span><span class="n">height</span><span class="p">);</span>
+<span class="n">_historyRTSystem</span><span class="p">.</span><span class="n">SwapAndSetReferenceSize</span><span class="p">(</span><span class="n">descriptor</span><span class="p">.</span><span class="n">width</span><span class="p">,</span><span class="w"> </span><span class="n">descriptor</span><span class="p">.</span><span class="n">height</span><span class="p">);</span>
+
+<span class="c1">// Since we do not use RTHandleScale, ensure render texture size correct</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">_historyRTSystem</span><span class="p">.</span><span class="n">rtHandleProperties</span><span class="p">.</span><span class="n">currentRenderTargetSize</span><span class="p">.</span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">descriptor</span><span class="p">.</span><span class="n">width</span>
+<span class="w">    </span><span class="o">||</span><span class="w"> </span><span class="n">_historyRTSystem</span><span class="p">.</span><span class="n">rtHandleProperties</span><span class="p">.</span><span class="n">currentRenderTargetSize</span><span class="p">.</span><span class="n">y</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">descriptor</span><span class="p">.</span><span class="n">height</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="n">_historyRTSystem</span><span class="p">.</span><span class="n">ResetReferenceSize</span><span class="p">(</span><span class="n">descriptor</span><span class="p">.</span><span class="n">width</span><span class="p">,</span><span class="w"> </span><span class="n">descriptor</span><span class="p">.</span><span class="n">height</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>AsyncCompute优化</strong></p>
+<p>屏幕空间光照的计算量比较大，因此可以使用AsyncCompute来提高效率。</p>
+<p>根据英伟达<a href="https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap/">Advanced API Performance: Async Compute and Overlap</a>的建议，我们可以在Compute Queue中计算SSR、GTAO，在Graphics Queue中做一些计算较轻的任务，例如阴影图的渲染。</p>
+<p>所以在启用AsyncCompute时修改一下URP中MainLightShadowCasterPass和AdditionalLightsShadowCasterPass的renderPassEvent。注意这里在实践中发现URP 14.0.12因为会在场景中没有相应光源阴影时Clear了错误的RenderTarget，会导致Pre-Z深度被清掉，所以要视情况调整顺序。</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Re-order light shadow caster pass renderPassEvent better for async compute.</span>
+<span class="kt">bool</span><span class="w"> </span><span class="n">enableAsyncCompute</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">_rendererData</span><span class="p">.</span><span class="n">PreferComputeShader</span><span class="w"> </span>
+<span class="w">                            </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">IllusionRuntimeRenderingConfig</span><span class="p">.</span><span class="n">Get</span><span class="p">().</span><span class="n">EnableAsyncCompute</span><span class="p">;</span>
+
+<span class="c1">// Shadow Caster has bug in URP14.0.12 when there is no main/additional light in scene which will clear pre-z.</span>
+<span class="c1">// So skip re-order when shadow is not rendered.</span>
+<span class="kt">bool</span><span class="w"> </span><span class="n">reorderMainLightShadowPass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">enableAsyncCompute</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">CanRenderMainLightShadow</span><span class="p">(</span><span class="n">renderingData</span><span class="p">);</span>
+<span class="kt">var</span><span class="w"> </span><span class="n">mainLightShadowCasterPass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UniversalRenderingUtility</span><span class="p">.</span><span class="n">GetMainLightShadowCasterPass</span><span class="p">(</span><span class="n">renderer</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">mainLightShadowCasterPass</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="n">mainLightShadowCasterPass</span><span class="p">.</span><span class="n">renderPassEvent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reorderMainLightShadowPass</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">IllusionRenderPassEvent</span><span class="p">.</span><span class="n">LightsShadowCasterPass</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">RenderPassEvent</span><span class="p">.</span><span class="n">BeforeRenderingShadows</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kt">bool</span><span class="w"> </span><span class="n">reorderAdditionalLightShadowPass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">enableAsyncCompute</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">CanRenderAdditionalLightShadow</span><span class="p">(</span><span class="n">renderingData</span><span class="p">);</span>
+<span class="kt">var</span><span class="w"> </span><span class="n">additionalLightsShadowCasterPass</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">UniversalRenderingUtility</span><span class="p">.</span><span class="n">GetAdditionalLightsShadowCasterPass</span><span class="p">(</span><span class="n">renderer</span><span class="p">);</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">additionalLightsShadowCasterPass</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="k">null</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="n">additionalLightsShadowCasterPass</span><span class="p">.</span><span class="n">renderPassEvent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">reorderAdditionalLightShadowPass</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">IllusionRenderPassEvent</span><span class="p">.</span><span class="n">LightsShadowCasterPass</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">RenderPassEvent</span><span class="p">.</span><span class="n">BeforeRenderingShadows</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>半分辨率优化</strong></p>
+<p>屏幕空间光照如果启用全分辨率，可以在Shader中直接LoadTexture减少一个Sampler，但带宽会吃的比较紧。如果使用半分辨率，就需要在ForwardPass中额外使用一个Sampler，这对于前向渲染来说比较够呛（启用SSR+SSGI+SSAO三个效果的话则可能需要3个Sampler）。</p>
+<p>因此HDRP对ScreenSpaceLighting功能普遍使用Compute In Half Resolution+Upsampling to RTSize的做法，Lighting就可以直接LoadTexture，这比URP原生SSAO只做半分辨率更为合理。</p>
+<h2 id="_10">全局光照方案细节</h2>
+<p>在Unity 2022中，URP还未支持APV，只有LightMap+LightProbes方案。前者纯静态、需要UV2，后者面向动态物体，但由于URP没有LightProbeProxy构建3D纹理，只能逐物体对附近的LightProbe做插值，这使得角色模型等复杂模型的间接光光照效果很差（与环境不一致）。</p>
+<p>所以IllusionRP亟需接入一套更方便的全局光照方案。</p>
+<p>接入SSGI是比较轻松的，但SSGI由于无法获取屏幕外的信息，我们还需要有一套Fallback的方案，因此IllusionRP采取了<strong>PRTGI+SSGI</strong>的全局光照组合。</p>
+<p><img alt="PRTGI+SSGI 全局光照" src="0005-illusionrp_files/7.png" /></p>
+<p><strong>预计算辐照度全局光照（PRTGI）</strong></p>
+<p>预计算辐照度全局光照（PRTGI）的实践在之前的文章<a href="https://zhuanlan.zhihu.com/p/1957857268528834096">《Unity预计算辐照度全局光照PRTGI实践与拓展（上）》</a>和<a href="https://zhuanlan.zhihu.com/p/1957865115991908586">《Unity预计算辐照度全局光照PRTGI实践与拓展（下）》</a>已介绍过，其缺点就是很容易丢失高频的漫反射信息，所以对于室内细节表现不佳。</p>
+<p>编辑器工具上，提供了和APV一样的Adjustment Volume来调整Probe位置。</p>
+<p><strong>屏幕空间全局光照（SSGI）</strong></p>
+<p>迁移HDRP中的SSGI方案后，将fallback到APV的部分改成采样PRT的IrradianceVolume即可。</p>
+<p>参考了HDRP和<a href="https://github.com/jiaozi158/UnitySSGIURP">jiaozi158/UnitySSGIURP</a>中的做法，对未命中的像素fallback到AmbientProbe和ReflectionProbes上。</p>
+<p>HDRP中的AmbientProbe来自物理天空盒，URP中暂未实现类似功能，因此直接使用RenderSettings中的ambientProbe（即LightSettings中设置的环境颜色）。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">private</span><span class="w"> </span><span class="k">void</span><span class="w"> </span><span class="nf">BindAmbientProbe</span><span class="p">(</span><span class="n">CommandBuffer</span><span class="w"> </span><span class="n">cmd</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="n">SphericalHarmonicsL2</span><span class="w"> </span><span class="n">ambientProbe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RenderSettings</span><span class="p">.</span><span class="n">ambientProbe</span><span class="p">;</span>
+<span class="w">    </span><span class="n">_ambientProbeBuffer</span><span class="w"> </span><span class="o">??=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">ComputeBuffer</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">);</span>
+<span class="w">    </span><span class="kt">var</span><span class="w"> </span><span class="n">array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">NativeArray</span><span class="o">&lt;</span><span class="n">Vector4</span><span class="o">&gt;</span><span class="p">(</span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="n">Allocator</span><span class="p">.</span><span class="n">Temp</span><span class="p">);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">6</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">7</span><span class="p">]);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Vector4</span><span class="p">(</span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">],</span><span class="w"> </span><span class="n">ambientProbe</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">],</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="w">    </span><span class="n">_ambientProbeBuffer</span><span class="p">.</span><span class="n">SetData</span><span class="p">(</span><span class="n">array</span><span class="p">);</span>
+<span class="w">    </span><span class="n">array</span><span class="p">.</span><span class="n">Dispose</span><span class="p">();</span>
+<span class="w">    </span><span class="n">cmd</span><span class="p">.</span><span class="n">SetGlobalBuffer</span><span class="p">(</span><span class="n">IllusionShaderProperties</span><span class="p">.</span><span class="n">_AmbientProbeData</span><span class="p">,</span><span class="w"> </span><span class="n">_ambientProbeBuffer</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="_11">后处理提升细节</h2>
+<p>因为笔者用的模型不是那么写实（日式写实），使用ACES时感觉效果不好，就找了两个方案：</p>
+<ol>
+<li><strong>Filmic ACES Tonemapping</strong>：参照UE将ACES参数暴露出来，根据场景调整。</li>
+</ol>
+<p><img alt="Filmic ACES Tonemapping" src="0005-illusionrp_files/8.png" /></p>
+<ol>
+<li><strong>Gran Turismo Tonemapping</strong>：使用更简单的曲线在不降低饱和度的情况下拉低过曝区域。</li>
+</ol>
+<p><img alt="Gran Turismo Tonemapping" src="0005-illusionrp_files/9.png" /></p>
+<p>到应用方面，URP实际也给我们预留了扩展接口，我们可以创建一个新的PostProcessData，在里面替换后处理Shader，然后在原有Shader基础上增加关键词控制Tonemapping算法即可。</p>
+<p><img alt="后处理扩展接口" src="0005-illusionrp_files/10.png" /></p>
+<p>从接入结果上看，对于笔者这里的角色，个人认为GT效果要更好些。</p>
+<p><img alt="GT vs ACES 效果对比" src="0005-illusionrp_files/11.png" /></p>
+<h2 id="_12">工作流细节</h2>
+<p><strong>着色器开发流程</strong></p>
+<p>IllusionRP将Shader开发分为了设计层和模型层，插件为每个新增的ShadingModel都提供了Amplify Shader Editor的Template，设计师可以像在HDRP或UE中一样直接选择ShadingModel练练看创建Shader，并且使用了HDRP的Surface Input提供了几个示例（HD Skin、HD Hair、HD Fabric等）。</p>
+<p>IllusionRP使用ASE作为设计层工具的一大原因是ASE的模板开发比较方便，可以通过注释来创建静态编译选项，例如Hair Template就可以直接在ASE编辑器中切换KajiyaKay和Marschner模型。</p>
+<p><img alt="ASE 模板" src="0005-illusionrp_files/12.png" /></p>
+<p><strong>效果管理流程</strong></p>
+<p>IllusionRP将为每个效果在RendererFeature上提供了全局开关，方便在不同平台下切换可使用的效果，以及之后方便剔除Shader变体。其次提供了VolumeComponent方便配置效果参数以及Gameplay侧的效果开关。</p>
+<p><img alt="RendererFeature 全局开关" src="0005-illusionrp_files/13.png" /></p>
+<p><strong>渲染调试流程</strong></p>
+<p>RendererDebugger是Unity原生的运行时调试工具，但可惜不支持非侵入式的拓展，所以基于之前写的开发框架<a href="https://github.com/AkiKurisu/Chris">AkiKurisu - Chris</a>走了自己的一套调试方式。</p>
+<p>Chris提供了类似Unreal的CVar功能，可以在控制台中输入变量来调整运行时启用的渲染效果以及一些Debug效果。</p>
+<p><img alt="CVar 调试控制台" src="0005-illusionrp_files/14.png" /></p>
+<p><strong>构建流程</strong></p>
+<p>对于渲染管线，构建部分要考虑的实际就是Shader变体控制，IllusionRP完全参考URP的Shader变体管理，使用Shader Prefiltering和Variant Stripper两个工具来分别进行剔除。</p>
+<p>Shader Prefiltering是Unity提供的粗筛漏斗，但这里存在设计问题导致有一些坑点。</p>
+<p>例如<code>[RemoveIf]</code>和<code>[SelectIf]</code>这几个Attribute只能作用在Const或序列化字段中，<strong>静态字段</strong>是不生效的。其次因为URP会在自己的Prefiltering中剔除掉例如ScreenSpaceShadow和ScreenSpaceOcclusion，我们需要标记overridePriority为true来覆盖URP的设置。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">public</span><span class="w"> </span><span class="k">partial</span><span class="w"> </span><span class="k">class</span><span class="w"> </span><span class="nc">IllusionRendererFeature</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="n">PrefilterMode</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Remove</span><span class="p">,</span>
+<span class="w">        </span><span class="n">Select</span><span class="p">,</span>
+<span class="w">        </span><span class="n">SelectOnly</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="na">[SelectIf(true, overridePriority: true, keywordNames: ScreenSpaceAmbientOcclusion.k_SourceDepthNormalsKeyword)]</span>
+<span class="w">    </span><span class="k">private</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="n">RequiresScreenSpaceOcclusionDepthNormals</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+
+<span class="w">    </span><span class="na">[RemoveIf(PrefilterMode.Remove,     keywordNames: IllusionShaderKeywords._SCREEN_SPACE_SSS)]</span>
+<span class="w">    </span><span class="na">[SelectIf(PrefilterMode.Select,     keywordNames: new []</span><span class="w"> </span><span class="p">{</span><span class="s">&quot;&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">IllusionShaderKeywords</span><span class="p">.</span><span class="n">_SCREEN_SPACE_SSS</span><span class="p">})]</span>
+<span class="w">    </span><span class="na">[SelectIf(PrefilterMode.SelectOnly, keywordNames: IllusionShaderKeywords._SCREEN_SPACE_SSS)]</span>
+<span class="w">    </span><span class="na">[SerializeField]</span>
+<span class="w">    </span><span class="k">internal</span><span class="w"> </span><span class="n">PrefilterMode</span><span class="w"> </span><span class="n">ScreenSpaceSubsurfaceScatteringPrefilterMode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PrefilterMode</span><span class="p">.</span><span class="n">Select</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Variant Stripper是更加精细化针对特定变体的剔除工具。IllusionRP直接参考URP，对于每一个Shader变体判断关键词组合是否有效，例如开启SURFACE_TYPE_TRANSPARENT后，因为没有写入深度，就不应该使用屏幕空间的效果例如SSAO、SSR、SSAO，我们就可以在Variant Stripper中剔除掉这些变体。</p>
+<div class="codehilite"><pre><span></span><code><span class="k">private</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="nf">StripUnusedFeatures_ScreenSpaceOcclusion</span><span class="p">(</span><span class="k">ref</span><span class="w"> </span><span class="n">ShaderStrippingData</span><span class="w"> </span><span class="n">strippingData</span><span class="p">,</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">ShaderStripTool</span><span class="o">&lt;</span><span class="n">ShaderFeatures</span><span class="o">&gt;</span><span class="w"> </span><span class="n">stripTool</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">strippingData</span><span class="p">.</span><span class="n">IsShaderFeatureEnabled</span><span class="p">(</span><span class="n">ShaderFeatures</span><span class="p">.</span><span class="n">ScreenSpaceOcclusion</span><span class="p">))</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Transparent strip ssao</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">strippingData</span><span class="p">.</span><span class="n">IsKeywordEnabled</span><span class="p">(</span><span class="n">_surfaceTypeTransparent</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">strippingData</span><span class="p">.</span><span class="n">IsKeywordEnabled</span><span class="p">(</span><span class="n">_screenSpaceOcclusion</span><span class="p">))</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stripTool</span><span class="p">.</span><span class="n">StripMultiCompileKeepOffVariant</span><span class="p">(</span><span class="n">_screenSpaceOcclusion</span><span class="p">,</span><span class="w"> </span><span class="n">ShaderFeatures</span><span class="p">.</span><span class="n">ScreenSpaceOcclusion</span><span class="p">))</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stripTool</span><span class="p">.</span><span class="n">StripMultiCompile</span><span class="p">(</span><span class="n">_screenSpaceOcclusion</span><span class="p">,</span><span class="w"> </span><span class="n">ShaderFeatures</span><span class="p">.</span><span class="n">ScreenSpaceOcclusion</span><span class="p">))</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="k">true</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="k">false</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h2 id="_13">参考</h2>
+<ul>
+<li><a href="https://zhuanlan.zhihu.com/p/567981404">图形引擎实战：HDRP移动版高清渲染管线改造</a></li>
+<li><a href="https://github.com/danbaidong1111/DanbaidongRP">DanbaidongRP</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/1907549925065070387">如何在Unity URP中让头发渲染更丝滑</a></li>
+<li><a href="https://github.com/stalomeow/StarRailNPRShader">stalomeow/StarRailNPRShader</a></li>
+<li><a href="https://github.com/recaeee/RecaNoMaho_P">recaeee/RecaNoMaho_P</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/370951892">自适应Shadow Bias算法</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/1912828657585590857">UPR Screen Space Reflection实践</a></li>
+<li><a href="https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap/">Advanced API Performance: Async Compute and Overlap</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/1957857268528834096">Unity预计算辐照度全局光照PRTGI实践与拓展（上）</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/1957865115991908586">Unity预计算辐照度全局光照PRTGI实践与拓展（下）</a></li>
+<li><a href="https://github.com/jiaozi158/UnitySSGIURP">jiaozi158/UnitySSGIURP</a></li>
+<li><a href="https://github.com/AkiKurisu/Chris">AkiKurisu - Chris</a></li>
+</ul>
+<p><strong>参考资料</strong></p>
+<ul>
+<li><a href="https://therealmjp.github.io/posts/sss-sg/">Matt - Approximating Subsurface Scattering With Spherical Gaussians</a></li>
+<li><a href="https://zhuanlan.zhihu.com/p/583108480">Unity实现SSS皮肤次表面散射</a></li>
+<li><a href="https://leegoonzblog.wordpress.com/2020/08/24/dual-lobe-for-skin-shader-by-urp/">jplee - Extra technique for Skin shader by URP</a></li>
+<li><a href="https://leegoonzblog.wordpress.com/2021/09/03/ue4-aces-tone-mapping-port-urp/">jplee - UE4 ACES Tone mapping port URP</a></li>
+<li><a href="https://advances.realtimerendering.com/s2016/The%20Process%20of%20Creating%20Volumetric-based%20Materials%20in%20Uncharted%204.pptx">Naughty Dog - The Process of Creating Volumetric-based Materials in Uncharted 4</a></li>
+<li><a href="https://jcgt.org/published/0002/02/09/">NVIDIA - Weighted Blended Order-Independent Transparency</a></li>
+<li><a href="http://casual-effects.blogspot.com/2014/03/weighted-blended-order-independent.html">Casual Effects - Weighted, Blended Order-Independent Transparency</a></li>
+<li><a href="https://zznewclear13.github.io/posts/unity-urp-apply-shadow-bias-in-fragment-shader/">ZZNEWCLEAR13 - 在URP的片元着色器中应用阴影偏移</a></li>
+</ul>
+<p><strong>仓库链接</strong></p>
+<p><a href="https://github.com/AkiKurisu/IllusionRP">AkiKurisu - IllusionRP</a></p>
+    </div>
+  </article>
+</div>
+
+<button id="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="回到顶部">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
+
+<div id="themeToggle" title="切换主题" role="button" tabindex="0">
+  <span id="themeIcon">☀️</span>
+</div>
+
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+(function() {
+  // Progress Bar
+  var bar = document.getElementById('progress-bar');
+  window.addEventListener('scroll', function() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = Math.min((window.scrollY / h) * 100, 100) + '%';
+  });
+
+  // Back to Top
+  var btn = document.getElementById('back-to-top');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+
+  // TOC fade in
+  document.getElementById('toc').classList.add('loaded');
+
+  // TOC active highlight
+  var tocLinks = [].slice.call(document.querySelectorAll('.toc-wrap a'));
+  var headings = [];
+  tocLinks.forEach(function(a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: a });
+  });
+
+  function updateTOC() {
+    var scrollY = window.scrollY + 120;
+    var active = null;
+    for (var i = 0; i < headings.length; i++) {
+      if (headings[i].el.offsetTop <= scrollY) {
+        active = headings[i].link;
+      }
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    if (active) active.classList.add('active');
+  }
+  window.addEventListener('scroll', updateTOC);
+  updateTOC();
+
+  // Copy Button
+  var pres = [].slice.call(document.querySelectorAll('.article pre'));
+  pres.forEach(function(pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    btn.title = '复制代码';
+    btn.addEventListener('click', function() {
+      var code = pre.querySelector('code');
+      var text = code ? code.textContent : '';
+      navigator.clipboard.writeText(text).then(function() {
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+        btn.classList.add('copied');
+        setTimeout(function() {
+          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+    pre.appendChild(btn);
+  });
+
+  // Lightbox
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightbox-img');
+  [].slice.call(document.querySelectorAll('.article img')).forEach(function(img) {
+    img.addEventListener('click', function() {
+      lightboxImg.src = img.src;
+      lightbox.classList.add('open');
+    });
+  });
+  window.closeLightbox = function() { lightbox.classList.remove('open'); };
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') lightbox.classList.remove('open');
+  });
+
+  // Theme Toggle
+  var themeToggle = document.getElementById('themeToggle');
+  var themeIcon = document.getElementById('themeIcon');
+  var lightThemeClass = 'theme-light';
+
+  function setTheme(isLight) {
+    document.documentElement.classList.toggle(lightThemeClass, isLight);
+    themeIcon.textContent = isLight ? '\u{1F319}' : '☀️';
+    try { localStorage.setItem('article-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+  }
+
+  try {
+    var saved = localStorage.getItem('article-theme');
+    if (saved === 'light') setTheme(true);
+    else if (saved === 'dark') setTheme(false);
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) setTheme(true);
+  } catch(e) {}
+
+  themeToggle.addEventListener('click', function() {
+    setTheme(!document.documentElement.classList.contains(lightThemeClass));
+  });
+
+  themeToggle.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); themeToggle.click(); }
+  });
+
+  })();
+</script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+<script data-goatcounter="https://gdc.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
